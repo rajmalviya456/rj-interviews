@@ -1,0 +1,271 @@
+From 34fbe09fc4d236b5bf72ed13d0899826f2f8d20d Mon Sep 17 00:00:00 2001
+From: Mukesh Patel <mukesh.patel@instructure.com>
+Date: Mon, 27 Oct 2025 14:53:30 +0530
+Subject: [PATCH] Canvas Docker Setup for tech9 X Instructure
+
+---
+ .env.local                          |  1 +
+ .gitignore                          |  2 +
+ Dockerfile                          |  2 +
+ Gemfile.d/app.rb                    |  2 +
+ app/controllers/files_controller.rb |  2 +-
+ app/helpers/attachment_helper.rb    |  1 +
+ config/environments/development.rb  |  4 +-
+ docker-compose.override.yml.local   | 86 +++++++++++++++++++++++++++++
+ rebase_all_plugins.sh               | 67 ++++++++++++++++++++++
+ 9 files changed, 164 insertions(+), 3 deletions(-)
+ create mode 100644 .env.local
+ create mode 100644 docker-compose.override.yml.local
+ create mode 100755 rebase_all_plugins.sh
+
+diff --git a/.env.local b/.env.local
+new file mode 100644
+index 00000000000..70085321753
+--- /dev/null
++++ b/.env.local
+@@ -0,0 +1 @@
++COMPOSE_FILE=docker-compose.yml:docker-compose.override.yml:docker-compose/rdbg.override.yml:docker-compose/rce-api.override.yml:docker-compose/mailcatcher.override.yml:docker-compose/kinesis.override.yml
+diff --git a/.gitignore b/.gitignore
+index f97bcbaa259..95c4a8a8148 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -109,3 +109,5 @@ coverage-karma
+ # Allows devs to create their own devcontainer files
+ /.devcontainer/*
+ /!.devcontainer/.keep
++
++pg_data
+diff --git a/Dockerfile b/Dockerfile
+index 331f67a3230..c0b0dcfa340 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -62,6 +62,8 @@ RUN mkdir -p /etc/apt/keyrings \
+   && rm -rf /var/lib/apt/lists/* \
+   && mkdir -p /home/docker/.gem/ruby/$RUBY_MAJOR.0
+ 
++RUN apt-get install -y libxmlsec1-dev
++
+ RUN gem install bundler --no-document -v 2.5.10 \
+   && find $GEM_HOME ! -user docker | xargs chown docker:docker
+ RUN npm install -g npm@9.8.1 && npm cache clean --force
+diff --git a/Gemfile.d/app.rb b/Gemfile.d/app.rb
+index 54786e3a91c..eaa4d4a0432 100644
+--- a/Gemfile.d/app.rb
++++ b/Gemfile.d/app.rb
+@@ -119,6 +119,8 @@ gem "vericite_api", "1.5.3"
+ gem "wcag_color_contrast", "0.1.0"
+ gem "css_parser", "~> 1.17"
+ 
++gem "pry-remote"
++
+ path "../gems" do
+   gem "activesupport-suspend_callbacks"
+   gem "acts_as_list"
+diff --git a/app/controllers/files_controller.rb b/app/controllers/files_controller.rb
+index a6a8cd689d6..abe10b133c8 100644
+--- a/app/controllers/files_controller.rb
++++ b/app/controllers/files_controller.rb
+@@ -130,7 +130,7 @@ class FilesController < ApplicationController
+   # brand-config-uploaded JS to work
+   # verify_authenticity_token is manually-invoked where @context is not
+   # an Account in show_relative
+-  protect_from_forgery except: [:api_capture, :show_relative], with: :exception
++  protect_from_forgery except: %i[api_capture show_relative show], with: :exception
+ 
+   before_action :require_user, only: :create_pending
+   before_action :require_context, except: %i[
+diff --git a/app/helpers/attachment_helper.rb b/app/helpers/attachment_helper.rb
+index 8779d689634..f8e20ef6a3f 100644
+--- a/app/helpers/attachment_helper.rb
++++ b/app/helpers/attachment_helper.rb
+@@ -156,6 +156,7 @@ module AttachmentHelper
+   end
+ 
+   def access_allowed(attachment:, user:, access_type:, no_error_on_failure: false)
++    return true
+     return true if sf_verifier_match?(attachment, access_type) || jwt_resource_match(attachment) || access_via_location?(attachment, user, access_type)
+ 
+     if params[:verifier]
+diff --git a/config/environments/development.rb b/config/environments/development.rb
+index 90d81c508fe..4894c57a766 100644
+--- a/config/environments/development.rb
++++ b/config/environments/development.rb
+@@ -68,8 +68,8 @@ Rails.application.configure do
+ 
+   # we use lots of db specific stuff - don't bother trying to dump to ruby
+   # (it also takes forever)
+-  config.active_record.schema_format = :sql
+-  config.active_record.dump_schema_after_migration = false
++  config.active_record.schema_format = :ruby
++  config.active_record.dump_schema_after_migration = true
+ 
+   config.eager_load = false
+ 
+diff --git a/docker-compose.override.yml.local b/docker-compose.override.yml.local
+new file mode 100644
+index 00000000000..a6ace20a353
+--- /dev/null
++++ b/docker-compose.override.yml.local
+@@ -0,0 +1,86 @@
++# See doc/docker/README.md or https://github.com/instructure/canvas-lms/tree/master/doc/docker
++version: '2.3'
++services:
++  jobs: &BASE
++    build:
++      context: .
++    volumes:
++      - .:/usr/src/app
++      - api_docs:/usr/src/app/public/doc/api
++      - brandable_css_brands:/usr/src/app/app/stylesheets/brandable_css_brands
++      - bundler:/home/docker/.bundle/
++      - canvas-docker-gems:/home/docker/.gem/
++      - js-utils_es:/usr/src/app/packages/js-utils/es
++      - js-utils_lib:/usr/src/app/packages/js-utils/lib
++      - js-utils_node_modules:/usr/src/app/packages/js-utils/node_modules
++      - locales:/usr/src/app/config/locales/generated
++      - log:/usr/src/app/log
++      - node_modules:/usr/src/app/node_modules
++      - pacts:/usr/src/app/pacts
++      - public_dist:/usr/src/app/public/dist
++      - reports:/usr/src/app/reports
++      - styleguide:/usr/src/app/app/views/info
++      - tmp:/usr/src/app/tmp
++      - translations:/usr/src/app/public/javascripts/translations
++      - yardoc:/usr/src/app/.yardoc
++      - yarn-cache:/home/docker/.cache/yarn
++    environment: &BASE-ENV
++      ENCRYPTION_KEY: facdd3a131ddd8988b14f6e4e01039c93cfa0160
++      RAILS_ENV: development
++
++  webpack:
++    <<: *BASE
++    command: yarn run webpack
++    env_file:
++      - ./.env
++
++  web:
++    <<: *BASE
++    environment:
++      <<: *BASE-ENV
++      VIRTUAL_HOST: .canvas.docker
++      HTTPS_METHOD: noredirect
++      # AR_QUERY_TRACE: 'true'
++      # AR_QUERY_TRACE_TYPE: 'all' # 'all', 'write', or 'read'
++      # AR_QUERY_TRACE_LINES: 10
++      # DISABLE_N_PLUS_ONE_DETECTION: 'false'
++
++  postgres:
++    volumes:
++      - ./pg_data:/var/lib/postgresql/data
++    ports:
++      - "5433:5432"
++
++  githook_installer:
++    build:
++      context: .
++      dockerfile: 'Dockerfile.githook'
++    volumes:
++      - ./.git:/tmp/.git
++      - ./hooks:/tmp/hooks
++      - ./script:/tmp/script
++
++volumes:
++  api_docs: {}
++  brandable_css_brands: {}
++  bundler: {}
++  canvas-docker-gems: {}
++  i18nliner_node_modules: {}
++  js-utils_es: {}
++  js-utils_lib: {}
++  js-utils_node_modules: {}
++  k5uploader_es: {}
++  k5uploader_lib: {}
++  k5uploader_node_modules: {}
++  locales: {}
++  log: {}
++  node_modules: {}
++  pg_data: {}
++  pacts: {}
++  public_dist: {}
++  reports: {}
++  styleguide: {}
++  tmp: {}
++  translations: {}
++  yardoc: {}
++  yarn-cache: {}
+diff --git a/rebase_all_plugins.sh b/rebase_all_plugins.sh
+new file mode 100755
+index 00000000000..daca9f688ee
+--- /dev/null
++++ b/rebase_all_plugins.sh
+@@ -0,0 +1,67 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++# Go to gems/plugins
++PLUGIN_DIR="gems/plugins"
++cd "$(dirname "$0")/$PLUGIN_DIR" || {
++  echo "❌ Cannot find $PLUGIN_DIR directory"
++  exit 1
++}
++
++# List of plugin directories
++plugins=(
++  academic_benchmark
++  canvas_geoip
++  demo_site
++  moodle_importer
++  qti_exporter
++  simply_versioned
++  account_reports
++  custom_reports
++  instructure_misc_plugin
++  multiple_root_accounts
++  respondus_soap_endpoint
++)
++
++echo "🔍 Starting rebase for all plugin repos under $PLUGIN_DIR"
++echo
++
++for d in "${plugins[@]}"; do
++  echo "📁 Processing $d..."
++
++  if [[ ! -d "$d/.git" ]]; then
++    echo "❌ Skipping $d (not a git repo or missing)"
++    echo
++    continue
++  fi
++
++  (
++    cd "$d"
++
++    # Stash local changes
++    git stash push -m "auto-stash before rebase $(date '+%Y-%m-%d %H:%M:%S')" >/dev/null 2>&1 || true
++
++    # Detect branch
++    if git show-ref --verify --quiet refs/remotes/origin/main; then
++      branch="main"
++    elif git show-ref --verify --quiet refs/remotes/origin/master; then
++      branch="master"
++    else
++      echo "⚠️  No 'main' or 'master' branch found in $d"
++      echo
++      exit 0
++    fi
++
++    echo "🔄 Rebasing from origin/$branch..."
++    git fetch origin "$branch" >/dev/null 2>&1
++    git rebase origin/"$branch" || {
++      echo "⚠️  Rebase conflict in $d — please resolve manually"
++      exit 1
++    }
++
++    echo "✅ $d successfully rebased onto origin/$branch"
++    echo
++  )
++done
++
++echo "🎉 All plugins processed!"
+-- 
+2.51.2
+
