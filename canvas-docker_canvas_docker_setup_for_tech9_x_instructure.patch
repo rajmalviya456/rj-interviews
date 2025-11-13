@@ -1,22 +1,26 @@
-From 34fbe09fc4d236b5bf72ed13d0899826f2f8d20d Mon Sep 17 00:00:00 2001
+From a7978d81288c56283a274768c2a0d3586f5cbb92 Mon Sep 17 00:00:00 2001
 From: Mukesh Patel <mukesh.patel@instructure.com>
 Date: Mon, 27 Oct 2025 14:53:30 +0530
 Subject: [PATCH] Canvas Docker Setup for tech9 X Instructure
 
 ---
- .env.local                          |  1 +
- .gitignore                          |  2 +
- Dockerfile                          |  2 +
- Gemfile.d/app.rb                    |  2 +
- app/controllers/files_controller.rb |  2 +-
- app/helpers/attachment_helper.rb    |  1 +
- config/environments/development.rb  |  4 +-
- docker-compose.override.yml.local   | 86 +++++++++++++++++++++++++++++
- rebase_all_plugins.sh               | 67 ++++++++++++++++++++++
- 9 files changed, 164 insertions(+), 3 deletions(-)
+ .env.local                          |   1 +
+ .gitignore                          |   2 +
+ Dockerfile                          |   2 +
+ Gemfile.d/app.rb                    |   2 +
+ app/controllers/files_controller.rb |   2 +-
+ app/helpers/attachment_helper.rb    |   1 +
+ config/CanvasLocalData.md           |   3 +
+ config/environments/development.rb  |   2 +-
+ docker-compose.override.yml.local   |  86 ++++
+ rebase_all_plugins.sh               |  67 +++
+ setup_local_canvas_data.rb          | 704 ++++++++++++++++++++++++++++
+ 11 files changed, 870 insertions(+), 2 deletions(-)
  create mode 100644 .env.local
+ create mode 100644 config/CanvasLocalData.md
  create mode 100644 docker-compose.override.yml.local
  create mode 100755 rebase_all_plugins.sh
+ create mode 100755 setup_local_canvas_data.rb
 
 diff --git a/.env.local b/.env.local
 new file mode 100644
@@ -86,21 +90,28 @@ index 8779d689634..f8e20ef6a3f 100644
      return true if sf_verifier_match?(attachment, access_type) || jwt_resource_match(attachment) || access_via_location?(attachment, user, access_type)
  
      if params[:verifier]
+diff --git a/config/CanvasLocalData.md b/config/CanvasLocalData.md
+new file mode 100644
+index 00000000000..a42c69dc971
+--- /dev/null
++++ b/config/CanvasLocalData.md
+@@ -0,0 +1,3 @@
++Main Site Admin: admin@canvas.com
++Main Local Account: local
++Default Password for all users: Pa$$w0rd!
 diff --git a/config/environments/development.rb b/config/environments/development.rb
-index 90d81c508fe..4894c57a766 100644
+index 90d81c508fe..541949eb0d7 100644
 --- a/config/environments/development.rb
 +++ b/config/environments/development.rb
-@@ -68,8 +68,8 @@ Rails.application.configure do
+@@ -68,7 +68,7 @@ Rails.application.configure do
  
    # we use lots of db specific stuff - don't bother trying to dump to ruby
    # (it also takes forever)
 -  config.active_record.schema_format = :sql
--  config.active_record.dump_schema_after_migration = false
 +  config.active_record.schema_format = :ruby
-+  config.active_record.dump_schema_after_migration = true
+   config.active_record.dump_schema_after_migration = false
  
    config.eager_load = false
- 
 diff --git a/docker-compose.override.yml.local b/docker-compose.override.yml.local
 new file mode 100644
 index 00000000000..a6ace20a353
@@ -266,6 +277,716 @@ index 00000000000..daca9f688ee
 +done
 +
 +echo "🎉 All plugins processed!"
+diff --git a/setup_local_canvas_data.rb b/setup_local_canvas_data.rb
+new file mode 100755
+index 00000000000..99b60cd480e
+--- /dev/null
++++ b/setup_local_canvas_data.rb
+@@ -0,0 +1,704 @@
++#!/usr/bin/env ruby
++# frozen_string_literal: true
++
++# Copyright (C) 2025 - present Instructure, Inc.
++#
++# This file is part of Canvas.
++#
++# Canvas is free software: you can redistribute it and/or modify it under
++# the terms of the GNU Affero General Public License as published by the Free
++# Software Foundation, version 3 of the License.
++#
++# Canvas is distributed in the hope that it will be useful, but WITHOUT ANY
++# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
++# A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
++# details.
++#
++# You should have received a copy of the GNU Affero General Public License along
++# with this program. If not, see <http://www.gnu.org/licenses/>.
++#
++# Setup script for local Canvas development data
++# Based on requirements in config/CanvasLocalData.md
++#
++# How to run:
++#   In docker environment:
++#     docker compose run --rm web bundle exec rails runner script/setup_local_canvas_data.rb
++#
++#   In localhost environment:
++#     bundle exec rails runner script/setup_local_canvas_data.rb
++
++require_relative "spec/factories/course_factory"
++require_relative "spec/factories/user_factory"
++require_relative "spec/factories/quiz_factory"
++
++# rubocop:disable Specs/ScopeIncludes
++# rubocop:disable Style/MixinUsage
++include Factories
++# rubocop:enable Style/MixinUsage
++
++# rubocop:enable Specs/ScopeIncludes
++
++# Configuration from CanvasLocalData.md
++ADMIN_EMAIL = "admin@canvas.com"
++ACCOUNT_NAME = "local"
++DEFAULT_PASSWORD = "Pa$$w0rd!"
++
++USERS = [
++  { email: "teacher1@canvas.com", sortable_name: "Teacher1", role: :teacher, sis_user_id: "teacher1" },
++  { email: "teacher2@canvas.com", sortable_name: "Teacher2", role: :teacher, sis_user_id: "teacher2" },
++  { email: "k5teacher1@canvas.com", sortable_name: "K5Teacher1", role: :k5teacher, sis_user_id: "k5teacher1" },
++  { email: "student1@canvas.com", sortable_name: "Student1", role: :student, sis_user_id: "student1" },
++  { email: "student2@canvas.com", sortable_name: "Student2", role: :student, sis_user_id: "student2" },
++  { email: "observer1@canvas.com", sortable_name: "Observer1", role: :observer, sis_user_id: "observer1" },
++  { email: "observer2@canvas.com", sortable_name: "Observer2", role: :observer, sis_user_id: "observer2" },
++  { email: "k5student1@canvas.com", sortable_name: "K5Student1", role: :k5student, sis_user_id: "k5student1" },
++  { email: "k5student2@canvas.com", sortable_name: "K5Student2", role: :k5student, sis_user_id: "k5student2" },
++  { email: "k5observer1@canvas.com", sortable_name: "K5Observer1", role: :k5observer, sis_user_id: "k5observer1" },
++  { email: "k5observer2@canvas.com", sortable_name: "K5Observer2", role: :k5observer, sis_user_id: "k5observer2" }
++].freeze
++
++def create_user(email, name, account, sis_user_id = nil)
++  # Find user by pseudonym unique_id since users don't have email column
++  pseudonym = account.pseudonyms.active.where(unique_id: email).first
++  user = pseudonym&.user
++
++  unless user
++    user = User.create!(name:)
++    pseudonym = account.pseudonyms.build(
++      user:,
++      unique_id: email,
++      password: DEFAULT_PASSWORD,
++      password_confirmation: DEFAULT_PASSWORD,
++      sis_user_id:
++    )
++    pseudonym.save_without_session_maintenance
++
++    # Create communication channel for email
++    cc = user.communication_channels.build(
++      path: email,
++      path_type: "email"
++    )
++    cc.workflow_state = "active"
++    cc.save!
++
++    user.accept_terms
++    user.register!
++    puts "  ✓ Created user: #{email} (SIS ID: #{sis_user_id})"
++  end
++  user
++end
++
++def create_users(account)
++  puts "\nCreating users..."
++  users = {}
++
++  USERS.each do |user_config|
++    email = user_config[:email]
++    role = user_config[:role]
++    sis_user_id = user_config[:sis_user_id]
++    name = email.split("@").first.capitalize.gsub(/\d+/, " \\0").strip
++
++    users[email] = {
++      user: create_user(email, name, account, sis_user_id),
++      role:
++    }
++  end
++
++  users
++end
++
++def create_assignment(course, title, description, points, graded, creator)
++  course.assignments.create!(
++    title:,
++    description:,
++    points_possible: graded ? points : nil,
++    grading_type: graded ? "points" : "not_graded",
++    submission_types: "online_text_entry",
++    workflow_state: "published",
++    saving_user: creator
++  )
++end
++
++def create_wiki_page(course, title, body, graded, creator, points = 25)
++  page = course.wiki_pages.create!(
++    title:,
++    body:,
++    workflow_state: "active"
++  )
++
++  if graded
++    assignment = course.assignments.create!(
++      title:,
++      submission_types: "wiki_page",
++      points_possible: points,
++      workflow_state: "published",
++      saving_user: creator
++    )
++    page.assignment = assignment
++    page.save!
++  end
++
++  page
++end
++
++def create_discussion(course, title, message, graded, points, creator)
++  assignment = nil
++  if graded
++    assignment = course.assignments.create!(
++      title:,
++      points_possible: points,
++      submission_types: "discussion_topic",
++      workflow_state: "published",
++      saving_user: creator
++    )
++  end
++
++  course.discussion_topics.create!(
++    user: creator,
++    title:,
++    message:,
++    assignment:,
++    workflow_state: "published"
++  )
++end
++
++def create_quiz(course, title, description, graded, points, creator)
++  @context = course
++  quiz = quiz_model
++  quiz.title = title
++  quiz.description = description
++  quiz.quiz_type = graded ? "assignment" : "practice_quiz"
++  quiz.points_possible = graded ? points : nil
++  quiz.time_limit = 45
++  quiz.save!
++
++  # Calculate points per question for graded quizzes
++  points_per_question = graded ? (points / 10.0).round(1) : 0
++
++  # Add 10 sample questions with variety
++  quiz.quiz_questions.create!(
++    question_data: {
++      name: "Multiple Choice Question 1",
++      question_type: "multiple_choice_question",
++      question_text: "What is the capital of France?",
++      answers: [
++        { text: "Paris", weight: 100, id: 1 },
++        { text: "London", weight: 0, id: 2 },
++        { text: "Berlin", weight: 0, id: 3 },
++        { text: "Madrid", weight: 0, id: 4 }
++      ],
++      points_possible: points_per_question
++    }
++  )
++
++  quiz.quiz_questions.create!(
++    question_data: {
++      name: "True/False Question 1",
++      question_type: "true_false_question",
++      question_text: "Canvas is a learning management system.",
++      answers: [
++        { text: "True", weight: 100, id: 1 },
++        { text: "False", weight: 0, id: 2 }
++      ],
++      points_possible: points_per_question
++    }
++  )
++
++  quiz.quiz_questions.create!(
++    question_data: {
++      name: "Multiple Choice Question 2",
++      question_type: "multiple_choice_question",
++      question_text: "Which programming language is known for web development?",
++      answers: [
++        { text: "JavaScript", weight: 100, id: 1 },
++        { text: "Assembly", weight: 0, id: 2 },
++        { text: "COBOL", weight: 0, id: 3 },
++        { text: "Fortran", weight: 0, id: 4 }
++      ],
++      points_possible: points_per_question
++    }
++  )
++
++  quiz.quiz_questions.create!(
++    question_data: {
++      name: "Multiple Choice Question 3",
++      question_type: "multiple_choice_question",
++      question_text: "What does HTML stand for?",
++      answers: [
++        { text: "HyperText Markup Language", weight: 100, id: 1 },
++        { text: "High Tech Modern Language", weight: 0, id: 2 },
++        { text: "Home Tool Markup Language", weight: 0, id: 3 },
++        { text: "Hyperlinks and Text Markup Language", weight: 0, id: 4 }
++      ],
++      points_possible: points_per_question
++    }
++  )
++
++  quiz.quiz_questions.create!(
++    question_data: {
++      name: "True/False Question 2",
++      question_type: "true_false_question",
++      question_text: "Python is a compiled programming language.",
++      answers: [
++        { text: "True", weight: 0, id: 1 },
++        { text: "False", weight: 100, id: 2 }
++      ],
++      points_possible: points_per_question
++    }
++  )
++
++  quiz.quiz_questions.create!(
++    question_data: {
++      name: "Multiple Choice Question 4",
++      question_type: "multiple_choice_question",
++      question_text: "Which of the following is a database management system?",
++      answers: [
++        { text: "MySQL", weight: 100, id: 1 },
++        { text: "HTML", weight: 0, id: 2 },
++        { text: "CSS", weight: 0, id: 3 },
++        { text: "JavaScript", weight: 0, id: 4 }
++      ],
++      points_possible: points_per_question
++    }
++  )
++
++  quiz.quiz_questions.create!(
++    question_data: {
++      name: "Multiple Choice Question 5",
++      question_type: "multiple_choice_question",
++      question_text: "What is the result of 2 + 2 * 2?",
++      answers: [
++        { text: "6", weight: 100, id: 1 },
++        { text: "8", weight: 0, id: 2 },
++        { text: "4", weight: 0, id: 3 },
++        { text: "10", weight: 0, id: 4 }
++      ],
++      points_possible: points_per_question
++    }
++  )
++
++  quiz.quiz_questions.create!(
++    question_data: {
++      name: "True/False Question 3",
++      question_type: "true_false_question",
++      question_text: "CSS is used for styling web pages.",
++      answers: [
++        { text: "True", weight: 100, id: 1 },
++        { text: "False", weight: 0, id: 2 }
++      ],
++      points_possible: points_per_question
++    }
++  )
++
++  quiz.quiz_questions.create!(
++    question_data: {
++      name: "Multiple Choice Question 6",
++      question_type: "multiple_choice_question",
++      question_text: "Which HTTP method is used to retrieve data?",
++      answers: [
++        { text: "GET", weight: 100, id: 1 },
++        { text: "POST", weight: 0, id: 2 },
++        { text: "DELETE", weight: 0, id: 3 },
++        { text: "PUT", weight: 0, id: 4 }
++      ],
++      points_possible: points_per_question
++    }
++  )
++
++  quiz.quiz_questions.create!(
++    question_data: {
++      name: "True/False Question 4",
++      question_type: "true_false_question",
++      question_text: "Git is a version control system.",
++      answers: [
++        { text: "True", weight: 100, id: 1 },
++        { text: "False", weight: 0, id: 2 }
++      ],
++      points_possible: points_per_question
++    }
++  )
++
++  quiz.generate_quiz_data
++  quiz.workflow_state = "available"
++  quiz.published_at = Time.zone.now
++  quiz.save!
++  quiz.reload
++  quiz
++end
++
++def create_module_with_content(course, module_name, teacher)
++  mod = course.context_modules.create!(
++    name: module_name,
++    workflow_state: "active"
++  )
++
++  puts "    Creating module: #{module_name}"
++
++  # Create graded assignment (50 points - practical for a module assignment)
++  assignment1 = create_assignment(
++    course,
++    "#{module_name} - Graded Assignment",
++    "This is a graded assignment with detailed instructions. Please submit your work by the due date.",
++    50,
++    true,
++    teacher
++  )
++  mod.add_item(id: assignment1.id, type: "assignment")
++
++  # Create ungraded assignment
++  assignment2 = create_assignment(
++    course,
++    "#{module_name} - Practice Assignment",
++    "This is an ungraded practice assignment. Use this to practice your skills.",
++    0,
++    false,
++    teacher
++  )
++  mod.add_item(id: assignment2.id, type: "assignment")
++
++  # Create graded wiki page (25 points)
++  wiki1 = create_wiki_page(
++    course,
++    "#{module_name} - Graded Page",
++    "<h2>Important Content</h2><p>This page contains important information for the course. Please read carefully and complete the associated assignment.</p>",
++    true,
++    teacher
++  )
++  mod.add_item(id: wiki1.id, type: "wiki_page")
++
++  # Create ungraded wiki page
++  wiki2 = create_wiki_page(
++    course,
++    "#{module_name} - Reference Page",
++    "<h2>Reference Material</h2><p>This page contains reference material for your studies. No submission required.</p>",
++    false,
++    teacher
++  )
++  mod.add_item(id: wiki2.id, type: "wiki_page")
++
++  # Create graded discussion (15 points - practical for participation)
++  discussion1 = create_discussion(
++    course,
++    "#{module_name} - Graded Discussion",
++    "Please share your thoughts on this topic. Your participation will be graded based on the quality and depth of your contributions.",
++    true,
++    15,
++    teacher
++  )
++  mod.add_item(id: discussion1.id, type: "discussion_topic")
++
++  # Create ungraded discussion
++  discussion2 = create_discussion(
++    course,
++    "#{module_name} - Open Discussion",
++    "This is an open discussion forum. Feel free to ask questions and share ideas with your classmates.",
++    false,
++    0,
++    teacher
++  )
++  mod.add_item(id: discussion2.id, type: "discussion_topic")
++
++  # Create graded quiz (10 points - 10 questions, 1 point each)
++  quiz1 = create_quiz(
++    course,
++    "#{module_name} - Graded Quiz",
++    "This quiz will test your understanding of the module content. You have 45 minutes to complete 10 questions.",
++    true,
++    10,
++    teacher
++  )
++  mod.add_item(id: quiz1.id, type: "quiz")
++
++  # Create ungraded quiz
++  quiz2 = create_quiz(
++    course,
++    "#{module_name} - Practice Quiz",
++    "This is a practice quiz to help you prepare. It is not graded and contains 10 questions.",
++    false,
++    0,
++    teacher
++  )
++  mod.add_item(id: quiz2.id, type: "quiz")
++
++  mod.save!
++  mod
++end
++
++def create_course_with_modules(account, course_name, teacher, students, observers)
++  puts "\n  Creating course: #{course_name}"
++
++  course = account.courses.create!(
++    name: course_name,
++    course_code: course_name.upcase.gsub(/\s+/, "-"),
++    workflow_state: "available"
++  )
++
++  # Enroll teacher
++  course.enroll_teacher(teacher, enrollment_state: "active")
++
++  # Enroll students
++  students.each do |student|
++    course.enroll_student(student, enrollment_state: "active")
++  end
++
++  # Enroll observers
++  observers.each do |observer|
++    course.enroll_user(observer, "ObserverEnrollment", enrollment_state: "active")
++  end
++
++  # Create modules with content
++  ["Introduction", "Core Concepts", "Advanced Topics", "Final Review"].each do |module_name|
++    create_module_with_content(course, module_name, teacher)
++  end
++
++  puts "  ✓ Course created with ID: #{course.id}"
++  course
++end
++
++def create_k5_course(account, course_name, teacher, students, observers)
++  puts "\n  Creating K5 course: #{course_name}"
++
++  course = account.courses.create!(
++    name: course_name,
++    course_code: course_name.upcase.gsub(/\s+/, "-"),
++    workflow_state: "available"
++  )
++
++  # Enroll teacher
++  course.enroll_teacher(teacher, enrollment_state: "active")
++
++  # Enroll students
++  students.each do |student|
++    course.enroll_student(student, enrollment_state: "active")
++  end
++
++  # Enroll observers
++  observers.each do |observer|
++    course.enroll_user(observer, "ObserverEnrollment", enrollment_state: "active")
++  end
++
++  # Create simplified modules for K5
++  ["Week 1", "Week 2"].each do |module_name|
++    create_module_with_content(course, module_name, teacher)
++  end
++
++  puts "  ✓ K5 Course created with ID: #{course.id}"
++  course
++end
++
++# Main execution
++puts "=" * 80
++puts "Setting up Canvas Local Development Data"
++puts "=" * 80
++
++# Step 1: Create or find account
++puts "\n[1/4] Setting up account..."
++account = Account.find_by!(name: "local")
++k5account = Account.find_by!(name: "Stride")
++
++ActiveRecord::Base.transaction do
++  # Step 2: List Account count
++  puts "\n[2/4] Accounts: #{Account.count}"
++
++  # Step 3: Create users
++  puts "\n[3/4] Creating users..."
++  users_hash = create_users(account)
++
++  # Organize users by role
++  teachers = users_hash.select { |_, v| v[:role] == :teacher }.values.map { |v| v[:user] }
++  k5_teachers = users_hash.select { |_, v| v[:role] == :k5teacher }.values.map { |v| v[:user] }
++  students = users_hash.select { |_, v| v[:role] == :student }.values.map { |v| v[:user] }
++  observers = users_hash.select { |_, v| v[:role] == :observer }.values.map { |v| v[:user] }
++  k5_students = users_hash.select { |_, v| v[:role] == :k5student }.values.map { |v| v[:user] }
++  k5_observers = users_hash.select { |_, v| v[:role] == :k5observer }.values.map { |v| v[:user] }
++
++  # Step 4: Create courses
++  puts "\n[4/4] Creating courses with modules and content..."
++
++  # Regular courses - Computer Science & Technology
++  course1 = create_course_with_modules(
++    account,
++    "Introduction to Computer Science",
++    teachers[0],
++    students,
++    observers
++  )
++
++  course2 = create_course_with_modules(
++    account,
++    "Web Development Fundamentals",
++    teachers[1],
++    students,
++    observers
++  )
++
++  course3 = create_course_with_modules(
++    account,
++    "Data Structures and Algorithms",
++    teachers[0],
++    students,
++    observers
++  )
++
++  course4 = create_course_with_modules(
++    account,
++    "Mobile App Development",
++    teachers[1],
++    students,
++    observers
++  )
++
++  course5 = create_course_with_modules(
++    account,
++    "Database Design and SQL",
++    teachers[0],
++    students,
++    observers
++  )
++
++  # Science & Mathematics courses
++  course6 = create_course_with_modules(
++    account,
++    "Introduction to Physics",
++    teachers[1],
++    students,
++    observers
++  )
++
++  course7 = create_course_with_modules(
++    account,
++    "Calculus I",
++    teachers[0],
++    students,
++    observers
++  )
++
++  course8 = create_course_with_modules(
++    account,
++    "Chemistry Fundamentals",
++    teachers[1],
++    students,
++    observers
++  )
++
++  # Business & Humanities courses
++  course9 = create_course_with_modules(
++    account,
++    "Business Management 101",
++    teachers[0],
++    students,
++    observers
++  )
++
++  course10 = create_course_with_modules(
++    account,
++    "Creative Writing",
++    teachers[1],
++    students,
++    observers
++  )
++
++  course11 = create_course_with_modules(
++    account,
++    "World History",
++    teachers[0],
++    students,
++    observers
++  )
++
++  course12 = create_course_with_modules(
++    account,
++    "Introduction to Psychology",
++    teachers[1],
++    students,
++    observers
++  )
++
++  k5_course1 = create_k5_course(
++    k5account,
++    "K5 - Elementary Mathematics",
++    k5_teachers[0],
++    k5_students,
++    k5_observers
++  )
++
++  k5_course2 = create_k5_course(
++    k5account,
++    "K5 - Elementary Reading",
++    k5_teachers[0],
++    k5_students,
++    k5_observers
++  )
++
++  k5_course3 = create_k5_course(
++    k5account,
++    "K5 - Elementary Science",
++    k5_teachers[0],
++    k5_students,
++    k5_observers
++  )
++
++  k5_course4 = create_k5_course(
++    k5account,
++    "K5 - Elementary Social Studies",
++    k5_teachers[0],
++    k5_students,
++    k5_observers
++  )
++
++  k5_course5 = create_k5_course(
++    k5account,
++    "K5 - Elementary Art",
++    k5_teachers[0],
++    k5_students,
++    k5_observers
++  )
++
++  # Summary
++  puts "\n" + ("=" * 80)
++  puts "Setup Complete!"
++  puts "=" * 80
++  puts "\nAccount Information:"
++  puts "  Account Name: #{account.name}"
++  puts "  Password: #{DEFAULT_PASSWORD}"
++  puts "\nUsers Created:"
++  puts "  Teachers (Regular Courses): #{teachers.map(&:email).join(", ")}"
++  puts "  Students (Regular Courses): #{students.map(&:email).join(", ")}"
++  puts "  Observers (Regular Courses): #{observers.map(&:email).join(", ")}"
++  puts "  K5 Teachers (K5 Courses Only): #{k5_teachers.map(&:email).join(", ")}"
++  puts "  K5 Students (K5 Courses Only): #{k5_students.map(&:email).join(", ")}"
++  puts "  K5 Observers (K5 Courses Only): #{k5_observers.map(&:email).join(", ")}"
++  puts "\n📚 Regular Courses Created (12):"
++  puts "\n  Computer Science & Technology:"
++  puts "    • #{course1.name} (ID: #{course1.id})"
++  puts "    • #{course2.name} (ID: #{course2.id})"
++  puts "    • #{course3.name} (ID: #{course3.id})"
++  puts "    • #{course4.name} (ID: #{course4.id})"
++  puts "    • #{course5.name} (ID: #{course5.id})"
++  puts "\n  Science & Mathematics:"
++  puts "    • #{course6.name} (ID: #{course6.id})"
++  puts "    • #{course7.name} (ID: #{course7.id})"
++  puts "    • #{course8.name} (ID: #{course8.id})"
++  puts "\n  Business & Humanities:"
++  puts "    • #{course9.name} (ID: #{course9.id})"
++  puts "    • #{course10.name} (ID: #{course10.id})"
++  puts "    • #{course11.name} (ID: #{course11.id})"
++  puts "    • #{course12.name} (ID: #{course12.id})"
++  puts "\n🎨 K5 Courses Created (5):"
++  puts "    • #{k5_course1.name} (ID: #{k5_course1.id})"
++  puts "    • #{k5_course2.name} (ID: #{k5_course2.id})"
++  puts "    • #{k5_course3.name} (ID: #{k5_course3.id})"
++  puts "    • #{k5_course4.name} (ID: #{k5_course4.id})"
++  puts "    • #{k5_course5.name} (ID: #{k5_course5.id})"
++  puts "\n📊 Content Summary:"
++  puts "  Regular courses: 4 modules each (48 total modules)"
++  puts "  K5 courses: 2 modules each (10 total modules)"
++  puts "  Each module contains:"
++  puts "    - 2 Assignments (1 graded: 50 pts, 1 ungraded)"
++  puts "    - 2 Wiki Pages (1 graded: 25 pts, 1 ungraded)"
++  puts "    - 2 Discussions (1 graded: 15 pts, 1 ungraded)"
++  puts "    - 2 Quizzes (1 graded: 10 pts with 10 questions, 1 ungraded with 10 questions)"
++  puts "  Total points per module: 100 pts (50 + 25 + 15 + 10)"
++  puts "\n🔑 All users have the same password: #{DEFAULT_PASSWORD}"
++  puts "=" * 80
++end
 -- 
 2.51.2
 
