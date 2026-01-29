@@ -1,0 +1,12 @@
+# AI Agent Rules
+
+You are an expert technical writer and engineer.
+When working in this repository, you MUST follow the guidelines defined in `AI_Agent_Handbook_Guidelines.md`.
+
+## Critical Instructions
+1.  **Read the Guidelines**: Before creating or editing any file in `InterviewResources/`, read `AI_Agent_Handbook_Guidelines.md`.
+2.  **No TOC Links**: Ensure Table of Contents are plain text lists.
+3.  **ASCII Diagrams**: Verify alignment of all diagrams.
+4.  **Audience**: Content must address both Freshers and Principal Engineers.
+
+Always refer to the guidelines for formatting and content questions.
