@@ -2329,6 +2329,40 @@ roles/
         grafana_port: 3000
 ```
 
+### Ansible Vault (Secret Management)
+**Goal**: Encrypt sensitive data (passwords, API keys) so they aren't stored in plain text in Git.
+
+**Commands**:
+```bash
+ansible-vault create secret.yml      # Create new encrypted file
+ansible-vault view secret.yml        # View content
+ansible-vault edit secret.yml        # Edit content
+ansible-vault encrypt plain.yml      # Encrypt existing file
+ansible-vault decrypt secret.yml     # Decrypt file
+```
+
+**Using in Playbook**:
+```yaml
+# Run playbook asking for password
+ansible-playbook site.yml --ask-vault-pass
+
+# Or use a password file
+ansible-playbook site.yml --vault-password-file ~/.vault_pass
+```
+
+---
+
+### Idempotency (The Core Concept)
+**Definition**: An operation is idempotent if running it multiple times yields the **same result** as running it once, without intended side effects.
+
+**Example**:
+- *Non-Idempotent*: `echo "line" >> file.txt` (Run twice -> duplicates line).
+- *Idempotent (Ansible)*: `lineinfile` module ensures the line exists. If it's already there, do nothing.
+
+**Why it matters**:
+- You can safely re-run an Ansible playbook on a server that is partially configured.
+- If a network glitch stops execution halfway, you just run it again.
+
 ---
 
 ### Ansible vs Terraform
@@ -3124,6 +3158,35 @@ stages:
 ---
 
 ## Section 13 — GCP (Google Cloud Platform)
+
+### Cloud SQL & BigQuery
+
+**Cloud SQL**:
+- Fully managed relational database service (MySQL, PostgreSQL, SQL Server).
+- **Use Case**: OLTP applications, web backends, general-purpose relational storage.
+- **Features**: Automatic backups, replication, high availability, vertical scaling.
+
+**BigQuery**:
+- Serverless, highly scalable, and cost-effective multi-cloud data warehouse.
+- **Use Case**: OLAP, data analytics, business intelligence, large-scale data processing.
+- **Architecture**: Separates compute (slots) from storage (Colossus). Query using standard SQL.
+
+---
+
+### Cloud Functions & Cloud Run
+
+**Cloud Functions**:
+- Event-driven serverless compute (FaaS).
+- **Triggered by**: HTTP requests, Cloud Storage events, Pub/Sub messages.
+- **Best for**: Single-purpose code glue, ETL triggers, lightweight APIs.
+
+**Cloud Run**:
+- Managed compute platform for running containerized applications.
+- **Triggered by**: HTTP requests, gRPC, Eventarc.
+- **Best for**: Stateless microservices, containerized web apps, language-agnostic workloads.
+- **Knative**: Built on the Knative open-source standard.
+
+---
 
 ### GCP Resource Hierarchy
 

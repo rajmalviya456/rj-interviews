@@ -31,6 +31,9 @@
 - Performance Optimization
 - Indexing (Clustered, Non-Clustered)
 - Query Tuning & Execution Plans
+- Advanced Query Scenarios (Window Functions, deduplication, gaps)
+- Database Design Principles (Normalization, ACID, CAP)
+- Advanced SQL Practice Questions
 
 ### Section 3 — Python for Data Engineering
 - Core Libraries (pandas, numpy, requests, boto3, sqlalchemy, pyspark)
@@ -190,11 +193,66 @@
 - Amazon Kinesis (Data Streams, Firehose, Analytics)
 - Amazon EMR (Managed Hadoop/Spark)
 - AWS Lake Formation (Governance, Fine-Grained Access Control)
-- Amazon QuickSight (BI Dashboards)
+- Amazon QuickSight (AWS BI)
+  - What is QuickSight
+  - QuickSight Architecture (SPICE, Direct Query)
+  - Data Sources (AWS Native, On-Premises, Third-Party)
+  - Datasets & Data Preparation
+  - Analysis & Visualizations
+  - Dashboards & Embedding
+  - QuickSight ML Insights (Anomaly Detection, Forecasting)
+  - Security & Governance (RLS, CLS, VPC, IAM)
+  - Administration & Pricing
+  - Performance Optimization
+  - Comparison: QuickSight vs Power BI vs Tableau
 - IAM for Analytics
 - External Tables
 - Pipeline Failure Handling (Job Bookmarks, Push Down Predicates)
 - End-to-End AWS Architecture Example
+- AWS Analytics Interview Questions
+
+### Section 14 — IBM Cognos Analytics
+- What is IBM Cognos Analytics
+- Cognos Architecture (Components Overview)
+  - Content Manager
+  - Dispatcher
+  - Gateway
+  - Query Engine
+  - Report Server
+- Cognos Connection Portal
+- Framework Manager (Metadata Modeling)
+  - Data Sources & Connections
+  - Creating Namespaces & Query Subjects
+  - Determinants (Granularity Control)
+  - Cardinality & Relationships
+  - Calculations & Filters
+  - Publishing Packages
+- Report Studio (Enterprise Reporting)
+  - Report Types (List, Crosstab, Chart, Map)
+  - Prompts (Value, Select, Date, Cascading)
+  - Bursting Reports (Distribution)
+  - Drill-Through & Master-Detail
+  - Conditional Formatting
+  - Page Sets & Page Layers
+- Query Studio (Ad-Hoc Reporting)
+- Analysis Studio (OLAP Analysis)
+- Dashboards & Visualization
+  - Dashboard Assembly & Widgets
+  - Interactive Filters & Parameters
+  - Mobile Dashboards
+- Cognos Data Modules
+  - Data Module vs Framework Manager
+  - Self-Service Data Preparation
+- Security & Access Control
+  - Cognos Namespaces & Authentication
+  - Roles & Capabilities
+  - Object-Level & Data-Level Security
+- Administration & Monitoring
+  - Content Administration
+  - Performance Tuning
+  - Scheduling & Event Studio
+- Cognos AI & Watson Integration
+- Interview Questions & Scenarios
 
 ---
 
@@ -402,11 +460,74 @@ ACID guarantees are essential for transactional databases and are now becoming c
   - *Use Case*: Employee Manager Hierarchy (Manager ID points to Employee ID in same table).
 
 ### SQL Clauses Deep Dive
-- **WHERE vs HAVING**: 
-  - `WHERE`: Filters rows *before* aggregation. (Cannot use aliases usually).
-  - `HAVING`: Filters groups *after* aggregation.
-- **GROUP BY Extensions**: `ROLLUP` (Subtotals), `CUBE` (All combinations), `GROUPING SETS`.
-- **ORDER BY**: Performance killer on large datasets. Use `LIMIT`.
+
+#### 1. Order of Execution (Logical Query Processing)
+**Interview Q**: "In which order does a SQL query execute?"
+*Answer*: It is NOT Top-to-Bottom.
+1.  **FROM / JOIN**: Determine the data source.
+2.  **WHERE**: Filter rows (cannot see aliases or aggregates).
+3.  **GROUP BY**: Collapse rows into groups.
+4.  **HAVING**: Filter groups (can see aggregates).
+5.  **SELECT**: Compute columns, aggregations, and aliases.
+6.  **DISTINCT**: Remove duplicates.
+7.  **ORDER BY**: Sort the result.
+8.  **LIMIT / OFFSET**: Restrict rows.
+9.  **UNION**: Combine results.
+
+#### 2. WHERE vs HAVING
+- **WHERE**:
+    - Filters *individual rows*.
+    - Executed *before* grouping.
+    - Cannot use aggregate functions (e.g., `WHERE COUNT(*) > 5` is invalid).
+- **HAVING**:
+    - Filters *groups*.
+    - Executed *after* grouping.
+    - Valid: `HAVING COUNT(*) > 5`.
+
+#### 3. ORDER BY Nuances
+- **Performance**: Sorting is expensive (`O(N log N)`). Avoid on large datasets unless filtered first.
+- **NULL Handling**:
+    - Default: NULLs often appear first (DB dependent).
+    - Explicit: `ORDER BY col ASC NULLS LAST`.
+- **Optimization**: An index on the sorted column can skip the sort step entirely.
+
+
+### SQL Comparative Concepts (Interview Favorites)
+
+#### 1. DELETE vs TRUNCATE vs DROP
+| Feature | DELETE | TRUNCATE | DROP |
+| :--- | :--- | :--- | :--- |
+| **Operation** | DML (Data Manipulation) | DDL (Data Definition) | DDL |
+| **Speed** | Slow (Logs each row) | Fast (Logs page deallocation) | Instant |
+| **Rollback** | Yes | Yes (in SQL Server/Postgres), No (Oracle/MySQL often auto-commit) | No |
+| **Where Clause** | Yes (`DELETE FROM T WHERE ID=1`) | No (Removes all rows) | No |
+| **Identity/Auto_Inc** | Does NOT reset | Resets to seed (usually 1) | N/A (Table gone) |
+| **Triggers** | Fires `ON DELETE` triggers | Does NOT fire triggers | Does NOT fire triggers |
+
+#### 2. UNION vs UNION ALL
+| Feature | UNION | UNION ALL |
+| :--- | :--- | :--- |
+| **Result** | Unique records (Removes duplicates) | All records (Includes duplicates) |
+| **Sort** | Sorts results (to find dupes) | No sorting |
+| **Performance** | Slower (Sort + Dedup overhead) | Faster (Append only) |
+| **Use Case** | Need distinct set | Just want to combine datasets |
+
+#### 3. Primary Key vs Unique Key
+| Feature | Primary Key (PK) | Unique Key (UK) |
+| :--- | :--- | :--- |
+| **Nulls** | NO Nulls allowed | Allows 1 Null (DB dependent, SQL Server allows 1) |
+| **Count** | Only 1 per table | Multiple allowed per table |
+| **Indexing** | Creates Clustered Index (default) | Creates Non-Clustered Index (default) |
+| **Purpose** | Uniquely identify a row | Enforce uniqueness on non-ID cols (e.g., Email) |
+
+#### 4. Temporary Tables vs Table Variables vs CTE
+| Feature | Temp Table (`#Temp`) | Table Variable (`@Table`) | CTE (`WITH`) |
+| :--- | :--- | :--- | :--- |
+| **Scope** | Session (visible to nested procs) | Batch (only current query block) | Single Statement |
+| **Storage** | Stored in `tempdb` (Disk) | Memory (spills to tempdb if large) | Memory (Logical) |
+| **Indexing** | Can add Indexes post-creation | PK/Unique only (Inline) | No Indexes |
+| **Performance** | Good for large datasets (>100k rows) | Good for small datasets (<100 rows) | Good for readability/recursion |
+| **Transaction** | Part of Transaction | Not part of Transaction (updates persist after Rollback!) | Part of Transaction |
 
 ### Aggregations & Expressions
 - **Aggregations**: `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`. `COUNT(DISTINCT x)` is expensive.
@@ -426,25 +547,181 @@ ACID guarantees are essential for transactional databases and are now becoming c
 - **Value**:
   - `LEAD(col)`: Next row's value.
   - `LAG(col)`: Previous row's value. (YoY calculation).
-- **Running Total**:
+- **Running Total (Frame Specification)**:
+  - **Standard**: `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`.
+      - "Sum from the start of the partition up to me".
+  - **Moving Average (3-month)**: `ROWS BETWEEN 2 PRECEDING AND CURRENT ROW`.
+      - "Average of me and the 2 rows before me".
+  - **Centered Moving Average**: `ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING`.
   ```sql
-  SUM(sales) OVER (PARTITION BY region ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+  SUM(sales) OVER (
+      PARTITION BY region 
+      ORDER BY date 
+      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+  )
   ```
 
 ### CTE vs Subqueries
-- **CTE (Common Table Expression)**: `WITH` clause.
-  - *Pros*: Readable, reusable within query.
-- **Subquery**: Nested `SELECT`.
-  - *Cons*: Hard to read "inside-out".
+
+#### 1. CTE (Common Table Expression) `WITH`
+- **Definition**: A temporary named result set.
+- **Pros**: Readability (top-down), Reusable (reference `CTE_Name` multiple times).
+- **Recursion**: CTEs support recursion (Hierarchies), Subqueries do not.
+
+#### 2. Subqueries (Deep Dive)
+- **Non-Correlated Subquery**:
+    - Independent query. Runs **once**.
+    - *Example*: "Find sales > average sales."
+    ```sql
+    SELECT * FROM Sales WHERE amount > (SELECT AVG(amount) FROM Sales);
+    ```
+- **Correlated Subquery**:
+    - Dependent query. Runs **once per row** of the outer query.
+    - *Example*: "Find sales > average sales *of that region*."
+    ```sql
+    SELECT * FROM Sales s1 
+    WHERE amount > (
+        SELECT AVG(amount) FROM Sales s2 WHERE s2.region = s1.region
+    );
+    ```
+    - *Performance*: Generally slower than Joins/Window Functions due to row-by-row execution. Prefer `AVG() OVER(PARTITION BY region)` instead.
 
 ### Stored Procedures vs Functions vs UDF
-- **Stored Procedure**:
-  - *Use*: Administrative tasks, complex logic using control flow (IF/ELSE), Transactions.
-  - *Call*: `CALL my_proc()`.
-- **User Defined Function (UDF)**:
-  - *Use*: Encapsulate logic used in `SELECT`. Returns a value.
-  - *Performance*: **Scalar UDFs** are often performance killers (run row-by-row). Prefer native SQL functions.
-- **Table Valued Function (TVF)**: Returns a table.
+
+#### 1. Stored Procedures (Deep Dive)
+**Definition**: A prepared SQL code that you can save, so the code can be reused over and over again. Can handle parameters, execute logic (IF/ELSE), and manage transactions.
+
+**Syntax Example (SQL Server/Postgres)**:
+```sql
+CREATE PROCEDURE UpdateInventory(@ProductID INT, @Qty INT)
+AS
+BEGIN
+    BEGIN TRANSACTION; -- Start ACID Transaction
+    
+    -- 1. Check current stock
+    IF (SELECT Stock FROM Inventory WHERE ID = @ProductID) < @Qty
+    BEGIN
+        ROLLBACK TRANSACTION; 
+        THROW 50000, 'Insufficient Stock', 1;
+    END
+
+    -- 2. Update stock
+    UPDATE Inventory SET Stock = Stock - @Qty WHERE ID = @ProductID;
+    
+    -- 3. Log sale
+    INSERT INTO SalesLog (ProductID, Qty, Date) VALUES (@ProductID, @Qty, GETDATE());
+    
+    COMMIT TRANSACTION; -- Save changes
+END;
+```
+**Benefits**:
+- **Performance**: Pre-compiled execution plans (cached). reduces network traffic (send 1 command instead of 10 statements).
+- **Security**: Prevent SQL Injection (parameterized). Users get permission on the Proc, not value underlying tables.
+- **Centralized Logic**: Business logic stays in DB, not scattered in Python/Java code.
+
+**How to Invoke (Call) a Stored Procedure**:
+
+*   **SQL Server / MySQL**:
+    ```sql
+    EXEC UpdateInventory @ProductID = 101, @Qty = 5;
+    -- OR
+    CALL UpdateInventory(101, 5); -- MySQL prefers CALL
+    ```
+
+*   **PostgreSQL**:
+    ```sql
+    CALL UpdateInventory(101, 5);
+    ```
+
+*   **Oracle**:
+    ```sql
+    BEGIN
+        UpdateInventory(101, 5);
+    END;
+    /
+    ```
+
+**Drawbacks**:
+- **Debugging**: Harder to debug than app code.
+- **Vendor Lock-in**: T-SQL (SQL Server) vs PL/pgSQL (Postgres) vs PL/SQL (Oracle) syntax differs greatly.
+- **Version Control**: Harder to track changes in Git compared to app code.
+
+#### 2. User Defined Functions (UDF) - Scalar
+**Definition**: A function that takes input parameters and returns a **single value** (scalar). Used for reusable calculation logic.
+
+**Syntax Example (Scalar)**:
+```sql
+CREATE FUNCTION CalculateTax(@Price DECIMAL(10,2), @Rate DECIMAL(10,2))
+RETURNS DECIMAL(10,2)
+AS
+BEGIN
+    RETURN @Price * (@Rate / 100);
+END;
+```
+
+**How to Use**:
+```sql
+-- Used inside SELECT or WHERE
+SELECT 
+    ProductID, 
+    Price, 
+    dbo.CalculateTax(Price, 20) AS TaxAmt 
+FROM Products;
+```
+
+**Limitations**:
+- **No Side Effects**: Cannot `INSERT`, `UPDATE`, or `DELETE` tables.
+- **Performance**: Runs **row-by-row** (slow on large datasets). The query optimizer rarely optimizes scalar UDFs.
+
+#### 3. Table Valued Function (TVF)
+**Definition**: A function that returns a **Table** instead of a single value. It acts like a "Parameterized View".
+
+**Type 1: Inline TVF (Performance Hero)**
+- Contains a *single* `SELECT` statement. The optimizer "inlines" this logic into the main query (like a macro), making it **very fast**.
+
+**Syntax Example (Inline TVF)**:
+```sql
+CREATE FUNCTION GetCustomerOrders(@CustomerID INT)
+RETURNS TABLE
+AS
+RETURN (
+    SELECT OrderID, OrderDate, TotalAmount
+    FROM Orders
+    WHERE CustomerID = @CustomerID
+);
+```
+
+**How to Use**:
+```sql
+-- Used in FROM / JOIN clause
+SELECT * 
+FROM dbo.GetCustomerOrders(501) AS C
+JOIN OrderDetails D ON C.OrderID = D.OrderID;
+```
+
+**Type 2: Multi-Statement TVF (Performance Villain)**
+- Uses a `@Table` variable, fills it with logic, and returns it.
+- **Why avoid?**: Treated as a "Black Box" by the optimizer (bad estimates, no parallel execution). Often slows down queries.
+
+#### 4. UDF vs Built-in Functions (Critical for Performance)
+**Built-in Functions**:
+- *Examples*: `SUM`, `AVG`, `UPPER`, `DATEADD`, `COALESCE`.
+- *Performance*: Highly optimized C++ code inside the database engine. They execute in batch mode.
+- *Recommendation*: **Always** prefer built-ins.
+
+**User Defined Functions (UDF)**:
+- *Examples*: `CalculateBusinessDays(Start, End)`, `ParseJSONCustom(str)`.
+- *Performance*: Interpreted at runtime. Often forces the engine to switch from "Batch Mode" to "Row-by-Row Mode", killing performance on millions of rows.
+
+**Comparison**:
+| Feature | Built-in Functions | Scalar UDFs |
+| :--- | :--- | :--- |
+| **Speed** | Blazing Fast (Native) | Slow (Context Switching) |
+| **Parallelism** | Yes (Multi-threaded) | Often No (Single-threaded) |
+| **Optimization** | Optimizer creates efficient plan | Optimizer treats as "Black Box" |
+| **Use Case** | Standard ops (Math, String, Date) | Custom complex business logic |
+
+**Optimization**: If you must use a UDF, convert it to an **Inline Table-Valued Function (iTVF)**, which the optimizer *can* expand and optimize, unlike a Scalar UDF.
 
 ### Query Optimization & Performance Tuning
 - **Execution Plan Analysis**:
@@ -459,6 +736,352 @@ ACID guarantees are essential for transactional databases and are now becoming c
   5. **Statistics**: Ensure stats are up to date so optimizer chooses right plan.
 
 ---
+
+### Advanced Query Questions (Practical Scenarios)
+
+#### Window Functions Deep Dive
+**Scenario**: "Calculate a running total of sales and a 3-month moving average."
+```sql
+SELECT 
+    date,
+    sales,
+    SUM(sales) OVER (ORDER BY date) as running_total,
+    AVG(sales) OVER (ORDER BY date ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) as moving_avg_3_months
+FROM daily_sales;
+```
+
+**Rank vs Dense Rank vs Row Number**:
+- `ROW_NUMBER()`: Unique sequential number (1, 2, 3, 4). Useful for pagination or deduplication.
+- `RANK()`: Ranking with gaps for ties (1, 2, 2, 4). Useful for "Top N" where ties matter.
+- `DENSE_RANK()`: Ranking without gaps (1, 2, 2, 3).
+*Interview Ques*: "Find the top 3 highest paid employees. If there's a tie for 3rd, include all of them." -> Use `DENSE_RANK()`.
+
+#### Deep Dive: LEAD & LAG (YoY & MoM Growth)
+**Concept**: Access data from a *previous* row (`LAG`) or *following* row (`LEAD`) in the same result set without a self-join.
+
+**Syntax**: `LAG(col, [offset], [default]) OVER (...)`
+
+**Scenario**: "Calculate Month-over-Month (MoM) revenue growth %."
+```sql
+SELECT 
+    month,
+    revenue,
+    LAG(revenue, 1, 0) OVER (ORDER BY month) as prev_month_revenue,
+    -- Growth Calculation
+    (revenue - LAG(revenue, 1, 0) OVER (ORDER BY month)) / NULLIF(LAG(revenue, 1, 0) OVER (ORDER BY month), 0) * 100 as mom_growth_pct
+FROM monthly_sales;
+```
+*Note: Always handle division by zero using `NULLIF`.*
+
+
+#### Deep Dive: LEAD & LAG (YoY & MoM Growth)
+**Concept**: Access data from a *previous* row (`LAG`) or *following* row (`LEAD`) in the same result set without a self-join.
+
+**Syntax**: `LAG(col, [offset], [default]) OVER (...)`
+
+**Scenario**: "Calculate Month-over-Month (MoM) revenue growth %."
+```sql
+SELECT 
+    month,
+    revenue,
+    LAG(revenue, 1, 0) OVER (ORDER BY month) as prev_month_revenue,
+    -- Growth Calculation
+    (revenue - LAG(revenue, 1, 0) OVER (ORDER BY month)) / NULLIF(LAG(revenue, 1, 0) OVER (ORDER BY month), 0) * 100 as mom_growth_pct
+FROM monthly_sales;
+```
+*Note: Always handle division by zero using `NULLIF`.*
+
+#### CTEs and Recursion
+**CTE vs Subquery**: Use CTEs for readability and reusability (referencing the same logic twice). Use Subqueries for simple, one-off filtering.
+
+**Recursive CTE Example (Employee Hierarchy)**:
+*Given limit of finding all subordinates of a Manager.*
+```sql
+WITH RECURSIVE Hierarchy AS (
+    -- Anchor Member (The Manager)
+    SELECT employee_id, name, manager_id, 1 as level
+    FROM employees
+    WHERE name = 'Alice'
+    
+    UNION ALL
+    
+    -- Recursive Member (Subordinates)
+    SELECT e.employee_id, e.name, e.manager_id, h.level + 1
+    FROM employees e
+    INNER JOIN Hierarchy h ON e.manager_id = h.employee_id
+)
+SELECT * FROM Hierarchy;
+```
+
+#### Data Deduplication
+**Scenario**: "Delete duplicate records, keeping only the latest entry."
+```sql
+WITH CTE AS (
+    SELECT *,
+           ROW_NUMBER() OVER (PARTITION BY unique_col ORDER BY created_at DESC) as rn
+    FROM my_table
+)
+DELETE FROM CTE WHERE rn > 1;
+-- Note: Syntax varies by DB (SQL Server/Postgres use above, MySQL requires DELETE JOIN)
+```
+
+#### Gap Detection and Sessionization
+**Scenario**: "Identify user sessions based on 30-minute inactivity windows."
+```sql
+SELECT 
+    user_id, 
+    timestamp,
+    -- New session if time diff > 30 mins
+    CASE WHEN timestamp - LAG(timestamp) OVER (PARTITION BY user_id ORDER BY timestamp) > INTERVAL '30 minutes' 
+         THEN 1 ELSE 0 END as is_new_session
+FROM clicks;
+-- Then do a Rolling Sum of 'is_new_session' to get session_id.
+```
+
+#### Handling Missing Data
+**NOT IN vs NOT EXISTS**:
+- `NOT IN`: Fails (returns NULL) if the subquery contains *any* NULL values. Unsafe if column is nullable.
+- `NOT EXISTS`: Handles NULLs correctly. Generally more performant as it stops scanning once a match is found.
+
+#### Pivot Tables (Rows to Columns)
+**Scenario**: "Show total sales by product as columns for each month."
+```sql
+SELECT 
+    DATE_TRUNC('month', order_date),
+    SUM(CASE WHEN product = 'A' THEN amount ELSE 0 END) as sales_A,
+    SUM(CASE WHEN product = 'B' THEN amount ELSE 0 END) as sales_B
+FROM sales
+GROUP BY 1;
+```
+
+---
+
+### Performance Tuning & Database Design
+
+#### 1. Optimization Techniques (When & Why)
+
+**A. Indexing Strategies**
+- **Clustered Index**: The physical order of data. Use on Primary Keys or columns used in range searches (`BETWEEN`, `>`, `<`).
+- **Non-Clustered Index**: A lookup map. Use on Foreign Keys and frequent filter columns (`WHERE status = 'Active'`).
+- **Composite Index**: `(Col A, Col B)`.
+    - *Why*: Speed up queries filtering on *both* A and B.
+    - *Rule*: Order matters. 'Left-Side Prefix'. Index `(A, B)` supports queries on `A` and `(A, B)`, but NOT just `B`.
+- **Covering Index**: An index that includes *all* columns requested by the query.
+    - *Why*: Avoids looking up the actual table row ("Key Lookup"). Blazing fast.
+    - *Syntax*: `CREATE INDEX idx_name ON Table(A) INCLUDE (B, C);`
+
+**B. Materialized Views**
+- **What**: Physically stored result of a query (unlike standard Views which are virtual).
+- **When to use**: Complex aggregations (SUM, COUNT) on huge datasets that don't need real-time data.
+- **Why**: Trade off storage for instant query speed. "Pay cost at write time, not read time".
+
+**C. Partitioning**
+- **Horizontal**: Splitting table by rows (e.g., `Sales_2023`, `Sales_2024`).
+    - *Why*: "Partition Pruning". Queries for 2024 skip 2023 data entirely.
+- **Vertical**: Splitting table by columns (e.g., `Users_Core` (ID, Email) and `Users_Details` (Bio, Preferences)).
+    - *Why*: Reduce I/O. 99% of queries only need ID/Email; don't load the Bio blob.
+
+**D. Temp Tables vs CTEs**
+- **CTE (`WITH`)**: Readable, exists only for the statement. Good for recursion or readability.
+- **Temp Table (`#Table`)**: Physically stored in TempDB. Can have indexes.
+    - *When to use*: If you need to query the intermediate result multiple times or join it heavily.
+
+---
+
+#### 2. Scaling Techniques (Improving Performance at Scale)
+
+**A. Vertical Scaling (Scale Up)**
+- *Concept*: Buy a bigger server (More RAM, faster CPU).
+- *Pros*: Simple. No code changes.
+- *Cons*: Expensive. Hardware limits (can't scale infinitely).
+
+**B. Horizontal Scaling (Scale Out)**
+- *Concept*: Add more servers.
+- *Technique 1: Read Replicas*:
+    - Master DB handles Writes. Slave DBs handle Reads.
+    - *Why*: Offload reporting/analytics queries from the transactional DB.
+    - *Risk*: **Replication Lag** (Slave might be 100ms behind Master).
+- *Technique 2: Sharding*:
+    - Split data across multiple servers based on a key (e.g., UserID 1-1000 on Server A, 1001-2000 on Server B).
+    - *Why*: Only way to handle petabytes of data or massive write throughput.
+    - *Cons*: Complex Joins/Transactions across shards are painful.
+
+**C. Caching (Redis / Memcached)**
+- *Concept*: Store hot data in RAM.
+- *Why*: DB disk I/O is slow (ms); RAM is instant (ns). Use for frequently read, rarely changed data (e.g., Product Categories).
+
+---
+
+### Database Design Principles
+
+#### 1. Normalization (Deep Dive)
+**Goal**: Organize data to reduce redundancy and improve integrity. "One fact in one place."
+
+**The Example Table (Unnormalized)**:
+| Student_ID | Course | Instructor | Instructor_Phone | Grade |
+| :--- | :--- | :--- | :--- | :--- |
+| 101 | Math, Science | Mr. A, Ms. B | 555-1234, 555-9876 | A, B |
+
+**Step 1: First Normal Form (1NF)**
+*Rule*: **Atomicity**. No lists, no arrays, no multi-value fields. Each cell must hold a single value.
+*Fix*: Split the multi-value cells into separate rows.
+| Student_ID | Course | Instructor | Instructor_Phone | Grade |
+| :--- | :--- | :--- | :--- | :--- |
+| 101 | Math | Mr. A | 555-1234 | A |
+| 101 | Science | Ms. B | 555-9876 | B |
+*Key*: Composite Primary Key is `(Student_ID, Course)`.
+
+**Step 2: Second Normal Form (2NF)**
+*Rule*: **No Partial Dependencies**. All non-key columns must depend on the *entire* Primary Key, not just part of it.
+*Problem*: `Instructor` and `Phone` depend only on `Course`, not on `Student_ID`.
+*Fix*: Split into two tables.
+*Table 1 (Grades)*: `(Student_ID, Course)` -> `Grade`
+*Table 2 (Courses)*: `(Course)` -> `Instructor`, `Instructor_Phone`
+
+**Step 3: Third Normal Form (3NF)**
+*Rule*: **No Transitive Dependencies**. Non-key columns should not depend on other non-key columns. "The Key, the Whole Key, and Nothing but the Key."
+*Problem*: In the `Courses` table, `Instructor_Phone` depends on `Instructor`, not `Course`. If Mr. A changes his phone, we shouldn't have to update every Course he teaches.
+*Fix*: Extract Instructor to a separate table.
+*Table 2 (Courses)*: `(Course)` -> `Instructor_ID`
+*Table 3 (Instructors)*: `(Instructor_ID)` -> `Name`, `Phone`
+
+**Result**: We have 3 tables (Grades, Courses, Instructors) linked by Foreign Keys. Redundancy is minimized.
+
+#### 2. ACID Properties (Transactions)
+**Goal**: Ensure database reliability. "The Bank Transfer Example" (Move $100 from A to B) is the standard test.
+
+**A - Atomicity ("All or Nothing")**:
+- **Rule**: The entire transaction takes place at once or doesn't happen at all.
+- **Scenario**: If you debit A ($100) but the system crashes before crediting B, the debit to A must be rolled back.
+- **Mechanism**: Transaction Log (Undo logs).
+
+**C - Consistency (Valid State)**:
+- **Rule**: Database must move from one valid state to another. Constraints (PK, FK, Checks) must be satisfied.
+- **Scenario**: Account balance cannot be negative. If a transaction tries to withdraw $200 from a $100 balance, the DB rejects it.
+
+**I - Isolation (Concurrency Control)**:
+- **Rule**: Multiple transactions occurring at the same time must not affect each other's execution.
+- **Isolation Levels** (Trade-off: Safety vs Performance):
+    1. **Read Uncommitted**: Dictionary definition of unsafe. Can read uncommitted data ("Dirty Read"). Fast but dangerous.
+    2. **Read Committed** (Default): You only see data that has been committed. Prevents Dirty Reads.
+    3. **Repeatable Read**: If you read a row once, you will see the same data if you read it again (Prevents "Non-Repeatable Reads").
+    4. **Serializable** (Strictest): Transactions run as if they were sequential. Prevents "Phantom Reads" (new rows appearing). Slowest.
+
+**D - Durability (Permanence)**:
+- **Rule**: Once a transaction is committed, it remains committed even in the event of power loss, crashes, or errors.
+- **Mechanism**: Write-Ahead Logging (WAL). Data is written to a specialized log on disk *before* being applied to the main database files.
+
+#### 3. CAP Theorem (Distributed Systems)
+**Goal**: Understanding trade-offs in distributed databases (NoSQL).
+- **Consistency**: Every read receives the most recent write or an error.
+- **Availability**: Every request receives a (non-error) response, without guarantee that it contains the most recent write.
+- **Partition Tolerance**: The system continues to operate despite an arbitrary number of messages being dropped/delayed by the network.
+- **The Rule**: You can only pick **2 out of 3**.
+    - **CP** (MongoDB, HBase): Consistent + Partition Tolerant. (May reject writes if network splits).
+    - **AP** (Cassandra, DynamoDB): Available + Partition Tolerant. (Reads might be stale, "Eventual Consistency").
+    - **CA** (RDBMS): Consistent + Available. (Only possible on a single machine; can't handle network partitions).
+
+---
+
+### Practice SQL Scenarios
+
+**Q1: Find customers who bought Item A but NEVER bought Item B.**
+*Approach 1 (LEFT JOIN)*:
+```sql
+SELECT DISTINCT a.customer_id
+FROM sales a
+LEFT JOIN sales b ON a.customer_id = b.customer_id AND b.item = 'B'
+WHERE a.item = 'A' AND b.customer_id IS NULL;
+```
+*Approach 2 (EXCEPT / MINUS)*:
+```sql
+SELECT customer_id FROM sales WHERE item = 'A'
+EXCEPT
+SELECT customer_id FROM sales WHERE item = 'B';
+```
+
+**Q4: Customers who placed orders on 2 CONSECUTIVE days.**
+*Self Join Approach:*
+```sql
+SELECT DISTINCT t1.customer_id
+FROM orders t1
+JOIN orders t2 
+    ON t1.customer_id = t2.customer_id 
+    AND DATEDIFF(t2.order_date, t1.order_date) = 1;
+```
+
+**Q5: Customers who placed orders on 3 CONSECUTIVE days.**
+*Window Function Approach (Lead/Lag or Row_Number)*:
+*Pattern: If `date - row_number = constant`, then dates are consecutive.*
+```sql
+WITH Ranked AS (
+    SELECT 
+        customer_id, 
+        order_date,
+        -- Magic Formula: date - row_number
+        DATE_SUB(order_date, INTERVAL ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY order_date) DAY) as grp
+    FROM orders
+)
+SELECT customer_id, COUNT(*) as streak_days
+FROM Ranked
+GROUP BY customer_id, grp
+HAVING COUNT(*) >= 3;
+```
+*Alternative (Self Join)*:
+```sql
+SELECT DISTINCT t1.customer_id
+FROM orders t1
+JOIN orders t2 ON t1.customer_id = t2.customer_id AND DATEDIFF(t2.order_date, t1.order_date) = 1
+JOIN orders t3 ON t1.customer_id = t3.customer_id AND DATEDIFF(t3.order_date, t1.order_date) = 2;
+```
+
+**Q5: Customers who bought Item A (e.g., 'Milk') and NOTHING else.**
+*Logic: Determine if user bought 'A' AND total distinct items bought is 1.*
+```sql
+SELECT customer_id
+FROM orders
+GROUP BY customer_id
+HAVING COUNT(DISTINCT item) = 1 AND MAX(item) = 'Milk';
+```
+*Alternative (NOT EXISTS)*:
+```sql
+SELECT customer_id FROM orders WHERE item = 'Milk'
+EXCEPT
+SELECT customer_id FROM orders WHERE item != 'Milk';
+```
+
+**Q2: Find the 2nd highest salary using Self Join (No Window Function).**
+```sql
+SELECT MAX(salary)
+FROM employee
+WHERE salary < (SELECT MAX(salary) FROM employee);
+```
+
+**Q3: Consecutive Seats in a Movie Theater.**
+*Find 3 consecutive empty seats.*
+```sql
+SELECT DISTINCT s1.seat_id
+FROM seats s1
+JOIN seats s2 ON s1.seat_id + 1 = s2.seat_id -- Next seat
+JOIN seats s3 ON s1.seat_id + 2 = s3.seat_id -- Next next seat
+WHERE s1.is_empty = 1 AND s2.is_empty = 1 AND s3.is_empty = 1;
+```
+*Window Function Alternative:*
+```sql
+WITH Grouped AS (
+    SELECT seat_id,
+           seat_id - ROW_NUMBER() OVER (ORDER BY seat_id) as grp
+    FROM seats
+    WHERE is_empty = 1
+)
+SELECT COUNT(*) as consecutive_count, MIN(seat_id) as start_seat
+FROM Grouped
+GROUP BY grp
+HAVING COUNT(*) >= 3;
+```
+
+---
+
 
 ## Section 3 — Python for Data Engineering
 
@@ -970,6 +1593,48 @@ You need extra columns in the dimension table:
 | 102 | C001 | Alice | Los Angeles | 2023-06-16 | 9999-12-31 | TRUE |
 
 Now, when reporting "Sales in New York for 2022", the JOIN uses `Fact_Sales.Customer_SK = 101` (the old record).
+
+---
+
+### SCD Type 2 SQL Implementation (MERGE Statement)
+
+**Scenario**: We have a `Staging_Customers` table (daily updates) and a `Dim_Customers` table (history). We need to process updates for SCD Type 2.
+
+**Logic**:
+1. **New Records**: Insert them as active (`Is_Current = 1`, `End_Date = NULL`).
+2. **Changed Records**:
+    - **Step A**: "Close" the existing active record (Update `Is_Current = 0`, `End_Date = Yesterday`).
+    - **Step B**: Insert the new version (Insert with `Is_Current = 1`).
+
+```sql
+-- This represents the 'Insert New Version' and 'Update Old Version' logic
+-- Note: Standard SQL MERGE can be complex for SCD2. An easier pattern is UPDATE then INSERT.
+
+-- 1. Close old records that have changed
+UPDATE Dim_Customers d
+SET 
+    Is_Current = 0,
+    Effective_End_Date = CURRENT_DATE - 1
+FROM Staging_Customers s
+WHERE d.Customer_ID = s.Customer_ID
+  AND d.Is_Current = 1
+  AND (d.City <> s.City OR d.Phone <> s.Phone); -- Check for changes
+
+-- 2. Insert new versions of changed records
+INSERT INTO Dim_Customers (Customer_ID, City, Phone, Effective_Start_Date, Effective_End_Date, Is_Current)
+SELECT 
+    s.Customer_ID, s.City, s.Phone, 
+    CURRENT_DATE, '9999-12-31', 1
+FROM Staging_Customers s
+JOIN Dim_Customers d ON s.Customer_ID = d.Customer_ID
+WHERE d.Is_Current = 0 
+  AND d.Effective_End_Date = CURRENT_DATE - 1; -- Only those we just closed
+
+-- 3. Insert specific new customers (Standard SCD Type 2 insert)
+INSERT INTO Dim_Customers (...)
+SELECT ... FROM Staging_Customers s
+WHERE NOT EXISTS (SELECT 1 FROM Dim_Customers d WHERE d.Customer_ID = s.Customer_ID);
+```
 
 ---
 
@@ -1752,6 +2417,42 @@ Power BI is Microsoft's flagship Business Intelligence tool. Understanding its a
 
 ---
 
+### Tableau Architecture & Components
+
+**1. Tableau Desktop**:
+- Authoring tool for creating dashboards and stories.
+- Connects to data, builds visuals, publishes to Server.
+
+**2. Tableau Server / Online (Cloud)**:
+- Enterprise platform for sharing and collaboration.
+- **Server**: On-premise or public cloud (AWS/Azure).
+- **Online (Cloud)**: Fully managed SaaS by Tableau.
+
+**3. Tableau Prep Builder**:
+- ETL tool for cleaning and reshaping data before analysis.
+- Visual flow (similar to Alteryx).
+
+**4. Tableau Public**:
+- Free version. Files saved to public web. No privacy.
+
+**Deep Dive: Connection Modes (Live vs Extract)**:
+- **Live**:
+    - Query sent to database on every interaction.
+    - **Pros**: Real-time data. No storage limit.
+    - **Cons**: Slower if DB is slow. Stresses the DB.
+- **Extract (Hyper Engine)**:
+    - Snapshot of data loaded into Tableau's in-memory engine.
+    - **Pros**: Blazing fast performance. Offline access.
+    - **Cons**: Data is stale until refreshed. Size limits.
+
+**LOD Expressions (Level of Detail)**:
+- **FIXED**: Calculates regardless of view filters. `1 for the whole dataset`.
+  - `{ FIXED [Region] : SUM([Sales]) }`
+- **INCLUDE**: Calculates at a lower level of detail (more granular).
+- **EXCLUDE**: Calculates at a higher level (aggregated).
+
+---
+
 ### Power BI Architecture Deep Dive
 
 > **ELI5**: Power BI is like a super-smart spreadsheet that can connect to almost any data source, let you build reports with drag-and-drop, and share them with thousands of people in your company.
@@ -1789,6 +2490,29 @@ Choosing the right connection mode is one of the most critical decisions in Powe
 **Composite Models (Advanced)**:
 - Combine Import tables (fast aggregations) with DirectQuery tables (detail drill-through).
 - Example: `Agg_Sales_Monthly` is Import (small, fast). `Detail_Sales` is DirectQuery (huge, but only queried on drill-through).
+
+---
+
+### Deep Dive: Measures vs Calculated Columns
+
+| Feature | Calculated Column | Measure |
+| :--- | :--- | :--- |
+| **Calculation Time** | Computed **during data refresh** and stored in RAM. | Computed **on the fly** (runtime) based on user interaction. |
+| **Storage** | Consumes RAM (increases model size). | Uses CPU (no storage cost). |
+| **Context** | Row Context (row-by-row). | Filter Context (aggregations). |
+| **Use Case** | Slicers, filters, categorization (e.g., `Age Group`). | Aggregations (e.g., `Total Sales`, `YTD`). |
+
+**Rule of Thumb**: Only use Calculated Columns if you need to filter/slice by that value. Otherwise, always use Measures to save memory.
+
+---
+
+### Deep Dive: Implicit vs Explicit DAX
+
+- **Implicit Measures**: Dragging a column (e.g., `Sales`) to a visual and selecting "Sum".
+  - *Cons*: Cannot be reused. Hard to format. Excel-style behavior.
+- **Explicit Measures**: Writing `Total Sales = SUM(Sales[Amount])`.
+  - *Pros*: Reusable in other measures (`CALCULATE([Total Sales], ...)`). Centralized logic. Better performance tuning.
+  - *Best Practice*: Always write explicit measures. Hidel numeric columns to force users to use measures.
 
 ---
 
@@ -2540,3 +3264,794 @@ Kinesis is AWS's suite for real-time data streaming and processing.
 | **Auditing** | Logs who accessed what data when. |
 
 ---
+
+### Amazon QuickSight (AWS BI)
+
+> **ELI5**: QuickSight is Amazon's cloud-based BI tool. Imagine Google Docs but for dashboards—you don't install anything, it scales automatically, and it's deeply integrated with AWS data services.
+
+**Definition**: Amazon QuickSight is a serverless, cloud-native business intelligence service that delivers insights through interactive dashboards and embedded analytics.
+
+**Key Differentiators**:
+| Feature | QuickSight Advantage |
+| :--- | :--- |
+| **Serverless** | No infrastructure to manage |
+| **SPICE** | In-memory engine for fast queries |
+| **Pay-per-Session** | Cost-effective for occasional users |
+| **AWS Native** | Seamless integration with S3, Athena, Redshift |
+| **ML Insights** | Built-in forecasting and anomaly detection |
+
+---
+
+#### QuickSight Architecture
+
+```
++-------------------+     +-------------------+     +-------------------+
+|  QuickSight UI    |     |  Embedding APIs   |     |  Mobile App       |
++--------+----------+     +--------+----------+     +--------+----------+
+         |                         |                         |
+         +-------------------------+-------------------------+
+                                   |
+                           +-------v-------+
+                           |  QuickSight   |
+                           |   Service     |
+                           +-------+-------+
+                                   |
+              +--------------------+--------------------+
+              |                                         |
+     +--------v--------+                       +--------v--------+
+     |     SPICE       |                       |  Direct Query   |
+     | (In-Memory)     |                       |  (Live to DB)   |
+     +--------+--------+                       +--------+--------+
+              |                                         |
+     +--------v--------+                       +--------v--------+
+     |  Data Refresh   |                       |  Data Sources   |
+     |  (Scheduled)    |                       | (Athena,Redshift|
+     +-----------------+                       |  S3, RDS, etc.) |
+                                               +-----------------+
+```
+
+**SPICE (Super-fast Parallel In-memory Calculation Engine)**:
+- QuickSight's proprietary in-memory engine that caches data for ultra-fast dashboard performance
+- Data is imported from source into SPICE, compressed and optimized
+- Queries run entirely in memory with scheduled refreshes (hourly, daily)
+
+**SPICE Limits**:
+| Edition | SPICE Capacity |
+| :--- | :--- |
+| Standard | 10 GB per user |
+| Enterprise | 10-500 GB (configurable) |
+
+**When to Use SPICE**:
+- Datasets under 500GB
+- Acceptable data latency (refresh interval)
+- High dashboard concurrency needed
+- Cost optimization (SPICE queries are cheaper)
+
+**Direct Query Mode**: Query data sources in real-time without importing into SPICE.
+- Advantages: Always fresh data, no SPICE capacity limits, works with large datasets
+- Disadvantages: Slower query performance, higher cost per query, dependent on source system availability
+
+**SPICE vs Direct Query Comparison**:
+| Aspect | SPICE | Direct Query |
+| :--- | :--- | :--- |
+| **Data Freshness** | Scheduled refresh | Real-time |
+| **Performance** | Very fast (in-memory) | Depends on source |
+| **Capacity Limit** | 500GB max | Unlimited |
+| **Cost** | Lower per query | Higher per query |
+| **Availability** | Independent of source | Requires source uptime |
+| **Best For** | Dashboards, high concurrency | Real-time KPIs, large data |
+
+---
+
+#### QuickSight Data Sources
+
+**AWS Native Sources**:
+| Source | Connection Type | Notes |
+| :--- | :--- | :--- |
+| **Amazon S3** | SPICE import | JSON, CSV, Parquet directly |
+| **Amazon Athena** | Both | Query S3 via Glue Catalog |
+| **Amazon Redshift** | Both | Cluster or Serverless |
+| **Amazon RDS** | Both | MySQL, PostgreSQL, etc. |
+| **Amazon Aurora** | Both | MySQL/PostgreSQL compatible |
+| **Amazon OpenSearch** | Direct Query | Log analytics |
+
+**On-Premises Sources**: JDBC Databases (via VPC connection or proxy), File Upload (CSV, Excel, TSV)
+
+**Third-Party Sources**: Snowflake, Salesforce, ServiceNow (Native connectors), Google Sheets (OAuth)
+
+**Data Refresh & Incremental Ingestion**:
+- Full Refresh: Replace entire dataset (simple, but slow for large data)
+- Incremental Refresh: Append new/changed rows only based on timestamp column
+
+---
+
+#### QuickSight Datasets & Data Preparation
+
+**Dataset**: A prepared, reusable data structure that powers analyses and dashboards.
+
+**Creation Flow**:
+1. Select data source
+2. Choose tables or write SQL
+3. Join multiple tables (if needed)
+4. Add calculated fields
+5. Save dataset
+
+**Data Preparation Features**:
+- Joins: Inner, Left, Right, Full, Cross (visual join builder)
+- Calculated Fields: Formulas applied to data
+- Filters at Dataset Level: Pre-filter data to reduce SPICE size
+
+**Custom SQL**: For complex joins, parameterized queries, and database-specific functions.
+
+**Row-Level Security (RLS) with Datasets**:
+- Create a rules dataset mapping user_email to allowed data (e.g., region)
+- Link rules to main dataset
+- QuickSight automatically filters data per user
+
+---
+
+#### QuickSight Analysis & Visualizations
+
+**Analysis**: The interactive workspace where you build visuals.
+**Dashboard**: Published, read-only version of an analysis.
+
+**Visual Types**:
+| Visual | Use Case | Key Feature |
+| :--- | :--- | :--- |
+| **Pivot Table** | Multi-dimensional analysis | Row/column hierarchies |
+| **KPI** | Single metric spotlight | Comparison to target |
+| **Bar Chart** | Category comparison | Horizontal/vertical |
+| **Line Chart** | Trend over time | Multiple series |
+| **Geospatial (Map)** | Location-based | Points, filled maps |
+| **Funnel** | Stage conversion | Sales pipeline |
+| **Sankey** | Flow visualization | Traffic paths |
+
+**Calculated Fields & Parameters**:
+- Calculated Fields: Formulas like YoY Growth, custom metrics
+- Parameters: User-controllable variables for interactive filtering
+
+**Filter Types**: Visual Filter (single visual), Sheet Filter (all visuals on sheet), Analysis Filter (all sheets), Cross-Dataset Filter
+
+**Actions**: Filter Action (click filters other visuals), URL Action (opens external link), Navigation Action (jumps to another sheet)
+
+---
+
+#### QuickSight Dashboards & Embedding
+
+**Publishing Flow**:
+1. Finalize analysis
+2. Click "Publish Dashboard"
+3. Set name and permissions
+4. Share with users/groups
+
+**Sharing Options**: User/Group (direct access), Public (anyone with link), Embedded (integrate into applications)
+
+**Embedding Options**:
+| Method | Use Case |
+| :--- | :--- |
+| **1-Click Embed** | Simple iframe in portal |
+| **SDK Embed** | Customized, secure embedding |
+| **Anonymous Embed** | Public-facing dashboards |
+
+---
+
+#### QuickSight ML Insights
+
+**Anomaly Detection**: Automatically identifies unusual patterns in data using ML.
+
+**Forecasting**: Predict future values based on historical trends with confidence intervals (P10, P50, P90).
+
+**Auto-Narratives**: AI-generated text explanations of data (e.g., "Revenue increased 15% MoM, driven by Electronics").
+
+**Suggested Insights**: QuickSight automatically surfaces interesting patterns like top contributors and correlations.
+
+---
+
+#### QuickSight Security & Governance
+
+**User Types**:
+| Type | Cost | Permissions |
+| :--- | :--- | :--- |
+| **Reader** | Per-session | View dashboards only |
+| **Author** | Monthly | Create analyses, datasets |
+| **Admin** | Monthly | Full management |
+
+**Namespaces**: Isolated environments within one account (for multi-tenancy).
+
+**Row-Level Security (RLS)**: Tag-Based Rules, Dataset Rules, Dynamic RLS with session tags from IAM.
+
+**Column-Level Security (CLS)**: Restrict access to sensitive columns by user/group.
+
+**VPC Connectivity**: Connect to private databases (RDS, Redshift in VPC) via VPC connection.
+
+**AWS IAM Integration**: Service roles for data source access, session tags for dynamic RLS, resource policies for cross-account sharing.
+
+---
+
+#### QuickSight Administration & Pricing
+
+**Pricing Models**:
+| Model | Best For | Structure |
+| :--- | :--- | :--- |
+| **User-Based** | Small/medium teams | $ per author/month, $ per reader/session |
+| **Capacity-Based** | Large organizations | Fixed monthly capacity (sessions included) |
+
+**SPICE Capacity Management**: Monitor via QuickSight Admin and CloudWatch metrics.
+
+**Asset Governance**: Folders for organization, folder-level permissions, tagging for discoverability.
+
+**Audit Logging**: CloudTrail integration for user actions, data source access, and compliance reporting.
+
+---
+
+#### QuickSight Performance Optimization
+
+**SPICE Best Practices**:
+| Practice | Benefit |
+| :--- | :--- |
+| Pre-aggregate data | Smaller SPICE size |
+| Limit columns | Faster refresh |
+| Use date filters | Import only needed data |
+| Incremental refresh | Faster updates |
+
+**Dataset Optimization**: Avoid SELECT *, push filters to SQL, use efficient data types, pre-calculate complex metrics.
+
+**Direct Query Tuning**: Create indexes on filter columns, use materialized views, optimize source database.
+
+---
+
+#### Comparison: QuickSight vs Power BI vs Tableau
+
+| Feature | QuickSight | Power BI | Tableau |
+| :--- | :--- | :--- | :--- |
+| **Pricing** | Pay-per-session | Per-user/month | Per-user/month |
+| **Architecture** | Serverless | Cloud + Desktop | Server + Desktop |
+| **In-Memory Engine** | SPICE | VertiPaq | Hyper |
+| **AWS Integration** | Native | Limited | Limited |
+| **ML Features** | Built-in | AI visuals | Einstein |
+| **Embedding** | Strong | Strong | Strong |
+| **Learning Curve** | Low | Medium | High |
+| **Customization** | Medium | High | Very High |
+| **Best For** | AWS shops, cost control | Microsoft shops | Power users, complex viz |
+
+---
+
+#### QuickSight Interview Questions
+
+**Q1**: What is SPICE and when would you use Direct Query instead?
+> **Answer**: SPICE is QuickSight's in-memory engine that caches data for fast queries. Use SPICE for dashboards with many viewers and acceptable data latency. Use Direct Query when you need real-time data, data exceeds SPICE limits, or cost per query is acceptable.
+
+**Q2**: How does Row-Level Security work in QuickSight?
+> **Answer**: RLS uses a rules dataset that maps users to the data they can see. QuickSight applies these rules at query time, automatically filtering data based on the signed-in user's identity.
+
+**Q3**: Explain the difference between Analysis and Dashboard in QuickSight.
+> **Answer**: An Analysis is the editable workspace where authors build visuals. A Dashboard is a published, read-only snapshot of an Analysis that can be shared with viewers.
+
+**Q4**: How would you embed QuickSight in a customer-facing application?
+> **Answer**: Use the QuickSight Embedding SDK. Generate a time-limited embed URL server-side using the GenerateEmbedUrlForRegisteredUser or GenerateEmbedUrlForAnonymousUser API. Pass this URL to the client-side SDK to render the dashboard in an iframe.
+
+**Q5**: A dashboard is loading slowly. How do you troubleshoot?
+> **Answer**:
+> 1. Check if using SPICE or Direct Query
+> 2. For Direct Query: optimize source database (indexes, partitions)
+> 3. For SPICE: check if refresh is slow (large dataset)
+> 4. Review visuals for expensive calculations
+> 5. Check number of visuals per sheet (consolidate)
+> 6. Use aggregated datasets instead of raw data
+
+**Q6**: How would you implement multi-tenancy in QuickSight for a SaaS application?
+> **Answer**:
+> 1. Create separate namespaces per tenant (isolation)
+> 2. Alternatively, use RLS with tenant_id column
+> 3. Embed dashboards with session tags for dynamic filtering
+> 4. Use capacity pricing for predictable costs
+> 5. Implement folder-level permissions per tenant
+
+**Q7**: You need to build a dashboard that shows real-time stock prices. Is QuickSight suitable?
+> **Answer**: Partially. QuickSight's Direct Query mode can query live data, but has seconds-to-minutes latency. For true real-time (sub-second), consider streaming tools (Kinesis, Grafana). QuickSight is better for near-real-time analytics (refresh every 15-60 seconds) with SPICE scheduled refresh or Direct Query.
+
+**Q8**: Compare costs for 1000 occasional viewers using QuickSight vs Power BI.
+> **Answer**: 
+> - **QuickSight Reader**: $0.30 per session (max $5/user/month). If viewers access 3 sessions/month = $3000/month.
+> - **Power BI Pro**: $10/user/month = $10,000/month.
+> - **Conclusion**: QuickSight is significantly cheaper for occasional users due to session-based pricing.
+
+---
+
+## Section 14 — IBM Cognos Analytics
+
+### What is IBM Cognos Analytics
+
+> **ELI5**: Think of Cognos as a sophisticated reporting factory. You feed it raw data from various sources, and it produces beautiful reports, dashboards, and analytics that business users can consume without needing to know SQL.
+
+**Definition**: IBM Cognos Analytics is an enterprise business intelligence (BI) platform that provides a comprehensive suite of tools for reporting, dashboarding, data exploration, and AI-powered insights. It enables organizations to access, analyze, and share data-driven insights across the enterprise.
+
+**Key Differentiators**:
+- **Enterprise-Grade**: Built for large organizations with complex reporting needs
+- **AI-Powered**: Watson AI integration for natural language queries and auto-generated insights
+- **Governed**: Strong metadata layer and security controls
+- **Flexible Deployment**: Cloud, on-premises, or hybrid
+
+**Evolution**:
+| Version | Era | Key Features |
+| :--- | :--- | :--- |
+| Cognos 7/8 | 2000s | Traditional OLAP, Report Studio, Query Studio |
+| Cognos 10 | 2010s | Business Insight, Active Reports |
+| Cognos 11 | 2015+ | Modern dashboards, Data Modules, responsive design |
+| Cognos Analytics | Current | Watson AI, natural language, self-service |
+
+---
+
+### Cognos Architecture (Components Overview)
+
+```
++------------------+     +------------------+     +------------------+
+|    Web Browser   |     |   Mobile App     |     |   REST API       |
++--------+---------+     +--------+---------+     +--------+---------+
+         |                        |                        |
+         +------------------------+------------------------+
+                                  |
+                          +-------v-------+
+                          |    Gateway    |  <-- Entry Point (Web Server)
+                          +-------+-------+
+                                  |
+                          +-------v-------+
+                          |  Dispatcher   |  <-- Routes Requests
+                          +-------+-------+
+                                  |
+         +------------------------+------------------------+
+         |                        |                        |
++--------v--------+      +--------v--------+      +--------v--------+
+|  Report Server  |      |  Query Engine   |      | Content Manager |
+| (Renders Output)|      | (Executes SQL)  |      | (Metadata Store)|
++-----------------+      +-----------------+      +-----------------+
+                                  |
+                          +-------v-------+
+                          |  Data Sources |
+                          | (DB, Cubes)   |
+                          +---------------+
+```
+
+#### Component Deep Dive
+
+**1. Gateway**:
+- Entry point for all HTTP/HTTPS requests
+- Handles authentication handoff
+- Load balancing across multiple dispatchers
+- Protocol: Runs on web server (IIS, Apache, IBM HTTP Server)
+
+**2. Dispatcher**:
+- Brain of Cognos - routes requests to appropriate services
+- Manages service availability and failover
+- Load balances across multiple report servers
+- Tracks active sessions
+
+**3. Content Manager**:
+- Stores all Cognos content (reports, dashboards, schedules)
+- Uses a Content Store database (DB2, SQL Server, Oracle)
+- Manages versioning and audit trails
+- Handles security policies
+
+**4. Query Engine**:
+- Translates Cognos queries into native SQL
+- Optimizes query execution plans
+- Supports multiple data source types simultaneously
+- Handles query caching
+
+**5. Report Server**:
+- Executes report specifications
+- Renders output (HTML, PDF, Excel, CSV)
+- Manages batch processing
+- Handles bursting and distribution
+
+---
+
+### Cognos Connection Portal
+
+**Definition**: The web-based interface where users access reports, dashboards, and analytics.
+
+**Key Features**:
+| Feature | Description |
+| :--- | :--- |
+| **Folders & Navigation** | Organize content hierarchically |
+| **My Content** | Personal workspace for each user |
+| **Scheduling** | Set up automated report execution |
+| **Subscriptions** | Users subscribe to reports for email delivery |
+| **Search** | Full-text search across all content |
+
+**User Experience Tiers**:
+1. **Consumers**: View reports and dashboards only
+2. **Authors**: Create reports using approved data sources
+3. **Administrators**: Manage security, content, and system settings
+
+---
+
+### Framework Manager (Metadata Modeling)
+
+> **ELI5**: Framework Manager is like creating a restaurant menu. The raw ingredients (database tables) are in the kitchen, but customers need a nice menu (metadata model) that describes dishes in business terms they understand.
+
+**Purpose**: Create a business-semantic layer that hides database complexity from report authors.
+
+#### Data Sources & Connections
+
+**Supported Sources**:
+- Relational: Oracle, SQL Server, DB2, PostgreSQL, MySQL
+- Cloud: Snowflake, Amazon Redshift, Google BigQuery
+- OLAP: IBM Cognos TM1, Microsoft Analysis Services
+- Files: CSV, Excel (via data modules)
+
+**Connection Configuration**:
+```
+Data Source: Oracle_ERP
+├── Connection String: jdbc:oracle:thin:@server:1521:ORCL
+├── Authentication: Signons (encrypted credentials)
+├── Isolation Level: Read Uncommitted
+└── Query Processing: Database Server
+```
+
+#### Creating Namespaces & Query Subjects
+
+**Namespace**: Logical container for organizing metadata objects.
+
+**Query Subject Types**:
+| Type | Description | Use Case |
+| :--- | :--- | :--- |
+| **Data Source Query Subject** | Direct import from database table/view | Initial import |
+| **Model Query Subject** | Built from other query subjects | Business logic layer |
+| **Stored Procedure Query Subject** | Wraps stored procedures | Complex calculations |
+
+**Best Practice (3-Layer Model)**:
+```
+Layer 1: Database Layer (Physical)
+    └── Direct imports from tables
+Layer 2: Business Layer (Logical)
+    └── Joins, filters, renamed columns
+Layer 3: Presentation Layer (User-facing)
+    └── Folders organized by business area
+```
+
+#### Determinants (Granularity Control)
+
+**Definition**: Rules that define the granularity (level of detail) of a query subject.
+
+**Why Important**: Prevents incorrect aggregations when joining tables at different grain levels.
+
+**Example**:
+```
+Table: Monthly_Sales
+├── Columns: Region, Month, Total_Sales, Avg_Order_Value
+├── Grain: One row per Region per Month
+└── Determinant: {Region, Month} uniquely identifies each row
+
+Without determinant: Joining to Daily_Orders could incorrectly
+multiply Total_Sales values!
+```
+
+#### Cardinality & Relationships
+
+**Cardinality Types**:
+| Type | Symbol | Example |
+| :--- | :--- | :--- |
+| One-to-One | 1:1 | Employee ↔ Employee_Details |
+| One-to-Many | 1:n | Department → Employees |
+| Many-to-Many | n:n | Students ↔ Courses (via junction table) |
+
+**Relationship Properties**:
+- **Inner Join**: Only matching rows (default)
+- **Outer Join**: All rows from one or both sides
+- **Shortcut Join**: Optimization to skip intermediate tables
+
+#### Calculations & Filters
+
+**Embedded Calculations**:
+```sql
+-- Profit Margin Calculation
+[Revenue] - [Cost] / [Revenue] * 100
+```
+
+**Filter Types**:
+| Filter Type | Applied When | Visibility |
+| :--- | :--- | :--- |
+| **Security Filter** | Always | Hidden from users |
+| **Mandatory Filter** | Always | Visible, cannot remove |
+| **Optional Filter** | User choice | Visible, can toggle |
+
+#### Publishing Packages
+
+**Package**: A deployable unit containing query subjects, relationships, and security.
+
+**Publishing Process**:
+1. Validate model (check for errors)
+2. Verify relationships and determinants
+3. Set object visibility (hidden vs visible)
+4. Apply security (object-level)
+5. Publish to Cognos server
+
+---
+
+### Report Studio (Enterprise Reporting)
+
+**Definition**: The professional report authoring tool for complex, production-grade reports.
+
+#### Report Types
+
+| Type | Best For | Example |
+| :--- | :--- | :--- |
+| **List Report** | Transactional detail | Invoice line items |
+| **Crosstab** | Comparative analysis | Sales by Region × Product |
+| **Chart** | Visual trends | Revenue over time |
+| **Map** | Geographic analysis | Sales by country |
+| **Financial** | P&L, Balance Sheets | Structured financial statements |
+
+#### Prompts (Interactive Reports)
+
+**Prompt Types**:
+| Prompt | UX | Use Case |
+| :--- | :--- | :--- |
+| **Value Prompt** | Text box | Free-form input |
+| **Select & Search** | Dropdown with search | Large lists (10,000+ items) |
+| **Date Prompt** | Calendar picker | Date range selection |
+| **Cascading Prompt** | Dependent dropdowns | Country → State → City |
+| **Tree Prompt** | Hierarchical selection | Org chart navigation |
+
+**Cascading Prompt Example**:
+```
+1. User selects Country = "USA"
+2. State dropdown refreshes to show only US states
+3. User selects State = "California"
+4. City dropdown shows California cities only
+```
+
+#### Bursting Reports (Distribution)
+
+**Definition**: Automatically split and distribute a single report to multiple recipients based on data values.
+
+**Scenario**: Monthly sales report burst by Region Manager.
+```
+Report runs once → Generates 50 regional versions →
+Each manager receives only their region's data via email/portal
+```
+
+**Bursting Setup**:
+1. Define burst key (e.g., Region_Code)
+2. Map burst key to recipient (email address)
+3. Set delivery method (email, file, portal)
+4. Schedule execution
+
+#### Drill-Through & Master-Detail
+
+**Drill-Through**: Navigate from summary to detail report.
+```
+Sales Dashboard (Summary) → Click on "West Region" →
+Opens Regional_Sales_Detail report with West Region filter applied
+```
+
+**Master-Detail**: Multiple data containers linked by selection.
+```
+Left Panel: Customer List (Master)
+Right Panel: Orders for Selected Customer (Detail)
+User clicks "Acme Corp" → Orders panel updates automatically
+```
+
+#### Conditional Formatting
+
+**Use Cases**:
+- Highlight negative values in red
+- Show trend arrows (↑↓→)
+- Color-code performance bands (Green/Yellow/Red)
+
+**Example**:
+```
+IF [Variance] < 0 THEN
+    Background: Red
+    Font Color: White
+ELSE IF [Variance] < 10 THEN
+    Background: Yellow
+ELSE
+    Background: Green
+```
+
+---
+
+### Query Studio (Ad-Hoc Reporting)
+
+**Definition**: Simplified tool for business users to create quick reports without IT help.
+
+**Features**:
+- Drag-and-drop interface
+- Auto-grouping and sorting
+- Basic calculations
+- Export to Excel
+
+**Limitation**: Cannot create complex layouts or advanced formatting.
+
+---
+
+### Analysis Studio (OLAP Analysis)
+
+**Definition**: Interactive OLAP exploration tool for dimensional analysis.
+
+**Key Capabilities**:
+| Action | Description |
+| :--- | :--- |
+| **Drill Down** | Year → Quarter → Month → Day |
+| **Drill Up** | Aggregate to higher level |
+| **Slice** | Filter on one dimension |
+| **Dice** | Filter on multiple dimensions |
+| **Pivot** | Swap rows and columns |
+
+---
+
+### Dashboards & Visualization
+
+**Dashboard Assembly**:
+- Drag widgets onto canvas
+- Connect widgets via data brushing
+- Add interactive filters
+- Set refresh intervals
+
+**Widget Types**:
+| Widget | Use Case |
+| :--- | :--- |
+| **KPI Card** | Single metric with target |
+| **Line Chart** | Trend over time |
+| **Bar Chart** | Category comparison |
+| **Heat Map** | Density visualization |
+| **List** | Detail data |
+
+**Mobile Dashboards**:
+- Responsive layout
+- Touch-friendly interactions
+- Offline capability (cached data)
+
+---
+
+### Cognos Data Modules
+
+**Definition**: Self-service data preparation tool allowing business users to blend data without Framework Manager.
+
+**Data Module vs Framework Manager**:
+| Feature | Data Module | Framework Manager |
+| :--- | :--- | :--- |
+| **User** | Business analysts | IT/BI developers |
+| **Skill Level** | Low | High |
+| **Governance** | Limited | Full |
+| **Data Sources** | Files, databases | Enterprise sources |
+| **Deployment** | Personal/shared | Enterprise-wide |
+
+**Self-Service Capabilities**:
+- Upload CSV/Excel files
+- Join multiple sources visually
+- Create calculated columns
+- Profile data quality
+
+---
+
+### Security & Access Control
+
+#### Cognos Namespaces & Authentication
+
+**Authentication Options**:
+| Method | Description |
+| :--- | :--- |
+| **LDAP/Active Directory** | Enterprise SSO |
+| **SAML** | Federated identity |
+| **Local Users** | Cognos-managed accounts |
+| **Custom Provider** | Java authentication module |
+
+#### Roles & Capabilities
+
+**Built-in Roles**:
+| Role | Permissions |
+| :--- | :--- |
+| **Consumers** | View reports only |
+| **Authors** | Create reports |
+| **Query Users** | Ad-hoc exploration |
+| **Administrators** | Full system access |
+
+**Capabilities**: Fine-grained permissions (e.g., "Create Interactive Reports", "Use Analysis Studio").
+
+#### Object-Level & Data-Level Security
+
+**Object Security**: Who can see/edit a specific report or folder.
+
+**Data-Level Security**: Row-level filtering based on user attributes.
+```sql
+-- In Framework Manager filter:
+[Region] = #sq($account.personalInfo.region)#
+-- Users only see data for their assigned region
+```
+
+---
+
+### Administration & Monitoring
+
+#### Content Administration
+
+- Manage folders and permissions
+- Move/copy/delete content
+- Import/export deployment packages
+- Version control
+
+#### Performance Tuning
+
+**Query Optimization**:
+| Technique | Benefit |
+| :--- | :--- |
+| Aggregate tables | Pre-calculate summaries |
+| Query caching | Reuse results |
+| Determinants | Correct granularity |
+| Parameterized queries | Reuse execution plans |
+
+#### Scheduling & Event Studio
+
+**Scheduling**: Run reports at specific times (daily, weekly, monthly).
+
+**Event Studio**: Trigger actions based on data conditions.
+```
+IF Daily_Sales < $50,000 THEN
+    Send alert email to Sales Director
+    Run detailed Sales_Analysis_Report
+```
+
+---
+
+### Cognos AI & Watson Integration
+
+**AI Features**:
+| Feature | Description |
+| :--- | :--- |
+| **Natural Language Query** | Ask questions in plain English |
+| **Auto-Generated Insights** | Watson suggests interesting patterns |
+| **Smart Annotations** | AI explains data points |
+| **Forecast** | Time-series predictions |
+
+**Example**: User types "Show me sales by region for last quarter" → Cognos generates visualization automatically.
+
+---
+
+### Interview Questions & Scenarios — IBM Cognos
+
+#### Conceptual Questions
+
+**Q1**: What is the difference between Framework Manager and Data Modules?
+> **Answer**: Framework Manager is an IT-governed metadata modeling tool for enterprise-wide semantic layers, requiring technical skills. Data Modules are self-service tools allowing business users to quickly blend and prepare data without IT involvement. Framework Manager offers full governance, determinants, and complex relationships; Data Modules are for agility.
+
+**Q2**: Explain the 3-layer modeling approach in Framework Manager.
+> **Answer**: Layer 1 (Database) imports tables directly. Layer 2 (Business) adds joins, calculations, and business logic. Layer 3 (Presentation) organizes objects into user-friendly folders. This separation allows changes at lower layers without breaking reports.
+
+**Q3**: What are Determinants and why are they important?
+> **Answer**: Determinants define the unique key (grain) of a query subject. They prevent double-counting when joining tables at different granularities. Without proper determinants, aggregations can produce incorrect results.
+
+**Q4**: How does bursting work in Cognos?
+> **Answer**: Bursting automatically splits a report based on a data column (burst key) and distributes each segment to the appropriate recipient. One report execution produces multiple personalized outputs.
+
+#### Scenario-Based Questions
+
+**Q5**: A report runs slowly. How do you troubleshoot?
+> **Answer**: 
+> 1. Check the generated SQL (Report Studio → Query tab)
+> 2. Look for missing indexes on filter columns
+> 3. Verify determinants are set correctly
+> 4. Check for unintended Cartesian products
+> 5. Consider aggregate tables for summary reports
+> 6. Enable query caching if data is static
+
+**Q6**: Users report seeing other users' data. How do you investigate?
+> **Answer**:
+> 1. Check data-level security filters in Framework Manager
+> 2. Verify the session parameter (e.g., #$account.personalInfo.region#) is populated
+> 3. Ensure filters use correct syntax (= vs IN)
+> 4. Test with the affected user's credentials
+> 5. Check for reports bypassing the secured package
+
+**Q7**: How would you implement a self-service BI layer while maintaining governance?
+> **Answer**:
+> 1. Create curated Data Modules from governed Framework Manager packages
+> 2. Apply row-level security at the package level
+> 3. Provide training on Data Modules
+> 4. Monitor usage via audit logs
+> 5. Establish a review process for promoting personal content to shared
+
+---
+

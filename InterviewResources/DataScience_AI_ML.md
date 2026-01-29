@@ -1211,6 +1211,38 @@ model = get_peft_model(base_model, config)
 
 ## Section 14 — Computer Vision
 
+### GANs (Generative Adversarial Networks)
+
+**Concept**: Two neural networks competing against each other in a zero-sum game.
+- **Generator (G)**: Creates fake data (images) from random noise. Tries to fool the discriminator.
+- **Discriminator (D)**: Evaluates data as real (from dataset) or fake (from generator). Tries to catch the generator.
+
+**Loss Function (Minimax Game)**:
+`min_G max_D V(D, G) = E[log D(x)] + E[log(1 - D(G(z)))]`
+
+**Challenges**:
+- **Mode Collapse**: Generator produces limited variety of samples.
+- **Vanishing Gradients**: If Discriminator is too good, Generator stops learning.
+
+---
+
+### Vision Transformers (ViT)
+
+**Concept**: Applying the Transformer architecture (Self-Attention) directly to images, replacing CNNs.
+
+**How it works**:
+1. **Patchification**: Break image into fixed-size patches (e.g., 16x16).
+2. **Linear Projection**: Flatten patches and map to vector embeddings.
+3. **Positional Embeddings**: Add position info since Transformers have no inherent sense of space.
+4. **Transformer Encoder**: Standard Multi-Head Self-Attention layers.
+5. **Class Token**: Special token used for final classification output.
+
+**ViT vs CNN**:
+- **Cons**: Needs massive datasets (JFT-300M) to outperform CNNs (lacks inductive bias like translation invariance).
+- **Pros**: Global receptive field from layer 1 (sees whole image at once).
+
+---
+
 ### Object Detection
 
 | Model | Description | Speed | Accuracy |
